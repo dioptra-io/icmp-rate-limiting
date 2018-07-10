@@ -10,7 +10,7 @@
 class rate_limit_sniffer_t {
 public:
 
-    explicit rate_limit_sniffer_t(const std::string & , const std::vector<Tins::IPv4Address> &);
+    explicit rate_limit_sniffer_t(const Tins::NetworkInterface & , const std::vector<Tins::IPv4Address> &);
     void set_pcap_file(const std::string &);
     void add_destination(const Tins::IPv4Address &);
     void start();
@@ -22,8 +22,9 @@ private:
 
     bool handler(Tins::PDU& packet);
 
-    std::string interface;
+    Tins::NetworkInterface interface;
     std::vector<Tins::IPv4Address> destinations;
+    std::unique_ptr<Tins::Sniffer> sniffer_ptr;
     std::thread sniffer_thread;
     std::vector <Tins::EthernetII> sniffed_packets;
     std::atomic<bool> stop_sniffing;

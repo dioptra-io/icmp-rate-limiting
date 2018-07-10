@@ -45,13 +45,16 @@ public:
         sniffer.sniff_loop(build_series);
         // Matches probe with replies and extract responsiveness
         sort_by_timestamp(outgoing_packets);
+        // Remove the last packet that had been sent to shut the sniffer.
+        outgoing_packets.erase(outgoing_packets.end()-1);
         for(const auto & packet : outgoing_packets){
             auto outgoing_pdu = packet.pdu();
             // Find the IP layer
             auto ip = outgoing_pdu->rfind_pdu<Tins::IP>();
-            // Figure out the transport layer
-            auto transport = ip.rfind_pdu<Protocol>();
-
+            auto transport = ip.find_pdu<Protocol>();
+            if (transport == nullptr){
+                continue;
+            }
 
             auto it = std::find_if(icmp_replies.begin(), icmp_replies.end(), [&ip, &transport](const Tins::Packet & matching_packet){
                 auto pdu = matching_packet.pdu();
@@ -59,7 +62,7 @@ public:
                 if (icmp->type() == Tins::ICMP::Flags::ECHO_REPLY){
                     if constexpr (std::is_same<Protocol, Tins::ICMP>::value){
                         try{
-                            if (icmp->id() == transport.id()){
+                            if (icmp->id() == transport->id()){
                                 return true;
                             }
                         } catch (const Tins::malformed_packet & e){
@@ -86,14 +89,13 @@ public:
                 auto ip_reply = it->pdu()->template rfind_pdu<Tins::IP>().src_addr();
                 // Erase this response.
 
-                std::cout << "Responsive " << ip_reply << " " <<  std::chrono::microseconds(packet.timestamp()).count() << "\n";
+//                std::cout << "Responsive " << ip_reply << " " <<  std::chrono::microseconds(packet.timestamp()).count() << "\n";
                 // Insert the reply in the responsiveness map
                 auto ip_key = packets_per_interface.find(ip_reply);
-                if (ip_key == packets_per_interface.end()){
-                    packets_per_interface.insert(std::make_pair(ip_key->first, std::vector<Tins::Packet>{*it}));
-                } else {
-                    packets_per_interface[ip_key->first].push_back(std::make_pair(true, *it));
+                if (ip_key == packets_per_interface.end()) {
+                    packets_per_interface.insert(std::make_pair(ip_reply, std::vector<responsive_info_probe_t>()));
                 }
+                packets_per_interface[ip_reply].push_back(std::make_pair(true, *it));
 
                 icmp_replies.erase(it);
             } else {
@@ -104,28 +106,40 @@ public:
                 } else {
                     if constexpr(std::is_same<Protocol, Tins::UDP>::value or std::is_same<Protocol, Tins::TCP>::value){
                         // Match the ip probe with the sport in case of indirect probing
-                        auto sport = transport.sport();
-                        auto ttl = ip.ttl();
-                        if (sport == std::get<0>(port_ttl_ip1) and ttl == std::get<1>(port_ttl_ip1)){
+                        if (match_probe<Protocol>(port_ttl_ip1, ip, transport)){
                             dst_ip = std::get<2>(port_ttl_ip1);
-                        } else if(sport == std::get<0>(port_ttl_ip2) and ttl == std::get<1>(port_ttl_ip2)){
+                        } else if (match_probe<Protocol>(port_ttl_ip2, ip, transport)){
                             dst_ip = std::get<2>(port_ttl_ip2);
+                        } else if (match_probe<Protocol>(port_ttl_ip_before, ip, transport)){
+                            dst_ip = std::get<2>(port_ttl_ip_before);
+                        } else if (match_probe<Protocol>(port_ttl_ip_after, ip, transport)){
+                            dst_ip = std::get<2>(port_ttl_ip_after);
                         }
                     }
                 }
 
                 auto ip_key = packets_per_interface.find(dst_ip);
                 if (ip_key == packets_per_interface.end()){
-                    packets_per_interface.insert(std::make_pair(ip_key->first, std::vector<Tins::Packet>()));
+                    packets_per_interface.insert(std::make_pair(dst_ip, std::vector<responsive_info_probe_t>()));
                 }
-                packets_per_interface[ip_key->first].push_back(std::make_pair(false,*it));
-                std::cout << "Unresponsive " << dst_ip << " " <<  std::chrono::microseconds(packet.timestamp()).count() << "\n";
+                packets_per_interface[dst_ip].push_back(std::make_pair(false, packet));
+//                std::cout << "Unresponsive " << dst_ip << " " <<  std::chrono::microseconds(packet.timestamp()).count() << "\n";
 
 
             }
         }
     }
 
+    using time_interval_t = std::pair<double,double>;
+    using responsiveness_time_interval_t = std::tuple<bool, int, time_interval_t >;
+    using time_series_t = std::vector<responsiveness_time_interval_t>;
+
+    std::unordered_map<Tins::IPv4Address, time_series_t> extract_responsiveness_time_series();
+
+    double
+
+    void dump_loss_rate();
+    void dump_time_series();
     void set_port_ttl_ip_before(const port_ttl_ip_t & new_port_ttl_ip_before);
     void set_port_ttl_ip_after(const port_ttl_ip_t & new_port_ttl_ip_after);
 
@@ -134,9 +148,20 @@ public:
 
 private:
 
-    void sort_by_timestamp(std::vector<Tins::Packet> &packets);
-    double compute_loss_rate(const std::vector<responsive_info_probe_t> &);
 
+    // Private functions to compute statistics indicators.
+    double compute_loss_rate(const std::vector<responsive_info_probe_t> &);
+    time_series_t extract_responsiveness_time_series(const std::vector <responsive_info_probe_t> &);
+
+
+    template<typename Protocol>
+    bool match_probe(const port_ttl_ip_t & candidate, const Tins::IP & probe, Protocol* transport){
+        auto sport = transport->sport();
+        auto ttl = probe.ttl();
+        return sport == std::get<0>(candidate) and ttl == std::get<1>(candidate);
+    }
+
+    void sort_by_timestamp(std::vector<Tins::Packet> &packets);
 //    std::vector<intervals_t> compute_responsiveness();
     // Analysis
     probing_style_t probing_style;

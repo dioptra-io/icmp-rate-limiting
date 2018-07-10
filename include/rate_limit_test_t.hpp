@@ -28,7 +28,7 @@ public:
      */
     rate_limit_test_t(int nb_probes,
                       int probing_rate,
-                      const std::string & sniff_interface, 
+                      const Tins::NetworkInterface & sniff_interface,
                       const Tins::IPv4Address & dst1,
                       const Tins::IPv4Address & dst2,
                       uint16_t sport, uint16_t dport):
@@ -51,7 +51,7 @@ public:
      */
     rate_limit_test_t(int nb_probes,
                       int probing_rate,
-                      const std::string & sniff_interface,
+                      const Tins::NetworkInterface & sniff_interface,
                       const Tins::IPv4Address & dst,
                       const Tins::IPv4Address & indirect_dst1,
                       const Tins::IPv4Address & indirect_dst2,
@@ -73,7 +73,7 @@ public:
      */
     rate_limit_test_t(int nb_probes,
                       int probing_rate,
-                      const std::string & sniff_interface,
+                      const Tins::NetworkInterface & sniff_interface,
                       const Tins::IPv4Address & dst1,
                       const Tins::IPv4Address & dst2
 
@@ -93,6 +93,8 @@ public:
         rate_limit_sniffer.set_stop_sniffing(true);
         rate_limit_sniffer.join();
         rate_limit_analyzer.start<Protocol>(get_pcap_file());
+        rate_limit_analyzer.dump_loss_rate();
+        rate_limit_analyzer.dump_time_series();
     }
 
     void set_pcap_file(const std::string &new_pcap_file){
@@ -131,6 +133,7 @@ public:
      */
     void set_before_address(uint16_t sport, uint16_t dport, const Tins::IPv4Address & dst_ip) {
         rate_limit_sender.set_before_hop_probe(dst_ip, sport, dport);
+        rate_limit_sniffer.add_destination(dst_ip);
     }
 
     /**

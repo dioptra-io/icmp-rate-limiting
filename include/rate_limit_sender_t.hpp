@@ -86,7 +86,7 @@ public:
             probe_pattern.push_back(after_hop_probe.second);
         }
         probe_pattern.push_back(type1_probe);
-        for (int i = 0; i < 4 ; ++i){
+        for (int i = 0; i < 8 ; ++i){
             probe_pattern.push_back(type2_probe);
         }
 
