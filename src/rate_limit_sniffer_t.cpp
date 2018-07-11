@@ -7,10 +7,10 @@
 #include <iostream>
 #include <sstream>
 #include "../include/rate_limit_sniffer_t.hpp"
-
+#include "../include/tins_utils_t.hpp"
 using namespace Tins;
 
-rate_limit_sniffer_t::rate_limit_sniffer_t(const Tins::NetworkInterface & interface, const std::vector<IPv4Address> & destinations):
+rate_limit_sniffer_t::rate_limit_sniffer_t(const Tins::NetworkInterface & interface, const std::unordered_set<IPv4Address> & destinations):
         interface(interface),
         destinations(destinations)
 {
@@ -37,16 +37,15 @@ void rate_limit_sniffer_t::start() {
     sniffer_ptr = std::make_unique<Sniffer>(interface.name(), config);
     // Launch sniffing thread.
     sniffer_thread = std::thread{([&]() {
-        sniffer_ptr->sniff_loop(Tins::make_sniffer_handler(this, &rate_limit_sniffer_t::handler));
+        sniffer_ptr->sniff_loop(TinsUtils::make_sniffer_handler(this,  &rate_limit_sniffer_t::handler));
     })};
 }
 
 
-bool rate_limit_sniffer_t::handler(Tins::PDU& packet) {
+bool rate_limit_sniffer_t::handler(Packet& packet) {
     // Search for it. If there is no IP PDU in the packet,
     // the loop goes on
-    sniffed_packets.push_back(packet.rfind_pdu<Tins::EthernetII>());
-//    std::cout << sniffed_packets.size() << "\n";
+    sniffed_packets.push_back(packet);
     if (stop_sniffing){
         return false;
     }
@@ -60,16 +59,30 @@ const std::string &rate_limit_sniffer_t::get_pcap_file() const  {
 void rate_limit_sniffer_t::join() {
     // Send a last ping packet here to receive a packet and stop the thread
     PacketSender sender;
-    auto kill_thread_pkt = IP(destinations[0])/ICMP();
+    auto kill_thread_pkt = IP(*destinations.begin())/ICMP();
     sender.send(kill_thread_pkt);
     sniffer_thread.join();
     // Write the results into a file.
     Tins::PacketWriter packet_writer{pcap_file, Tins::DataLinkType<Tins::EthernetII>()};
-    packet_writer.write(sniffed_packets.begin(), sniffed_packets.end());
+    for (auto & packet: sniffed_packets){
+        packet_writer.write(packet);
+    }
 }
 
 void rate_limit_sniffer_t::add_destination(const Tins::IPv4Address & destination) {
-    destinations.push_back(destination);
+    destinations.insert(destination);
+}
+
+rate_limit_sniffer_t::rate_limit_sniffer_t(const rate_limit_sniffer_t & copy_sniffer) :
+        interface(copy_sniffer.interface),
+        destinations(copy_sniffer.destinations),
+        sniffer_ptr(),
+        sniffer_thread(),
+        sniffed_packets(),
+        stop_sniffing(false),
+        pcap_file(copy_sniffer.pcap_file)
+{
+
 }
 
 

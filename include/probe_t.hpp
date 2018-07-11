@@ -13,6 +13,13 @@ template<typename P>
 class probe_t{
 public:
 
+    struct probe_configuration_t{
+        Tins::IPv4Address dst_ip;
+        uint16_t sport;
+        uint16_t dport;
+        uint8_t  ttl;
+    };
+
     probe_t() = default;
     /**
      * ICMP probing
