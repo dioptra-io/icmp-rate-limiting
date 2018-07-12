@@ -11,6 +11,7 @@ using namespace Tins;
 
 namespace{
     int potential_alias_packets = 50;
+
 }
 
 rate_limit_sender_t::rate_limit_sender_t(int nb_probes, int probing_rate, const Tins::NetworkInterface &iface,
@@ -21,25 +22,28 @@ rate_limit_sender_t::rate_limit_sender_t(int nb_probes, int probing_rate, const 
         sending_iface{iface},
         candidates{candidates},
         options_ip{options_ip},
-        protocol(candidates[0].protocol())
+        sender(AF_INET, SOCK_RAW, candidates[0].protocol())
 {
-
+    sender.set_buffer_size(sender.get_buffer_size(SO_SNDBUF) * 64);
 }
 
 rate_limit_sender_t::rate_limit_sender_t(const rate_limit_sender_t &copy_rate_limit_sender):
         nb_probes{copy_rate_limit_sender.nb_probes},
         probing_rate{copy_rate_limit_sender.probing_rate},
         sending_iface{copy_rate_limit_sender.sending_iface},
-        sender{PacketSender()},
         candidates{copy_rate_limit_sender.candidates},
         options_ip{copy_rate_limit_sender.options_ip},
-        protocol{copy_rate_limit_sender.protocol}
+        sender{AF_INET, SOCK_RAW, candidates[0].protocol()}
 {
-
+    sender.set_buffer_size(sender.get_buffer_size(SO_SNDBUF) * 64);
 }
 
 std::vector<Tins::IP> rate_limit_sender_t::build_probing_pattern(int N) {
     std::vector<IP> probing_pattern;
+    if (N == 0){
+        probing_pattern.push_back(candidates[0]);
+    }
+
     for (int i = 0; i < N/2; ++i){
         probing_pattern.push_back(candidates[0]);
     }
@@ -84,27 +88,26 @@ void rate_limit_sender_t::start() {
         if (icmp != nullptr){
             icmp->id(ip_id);
         }
-        probe_to_send.send(sender, sending_iface);
-        if (probe_sent != nb_probes - 1){
-            bool sleep = true;
-            auto start_loop = std::chrono::system_clock::now();
-            while(sleep)
-            {
-                auto now = std::chrono::system_clock::now();
-                auto elapsed = std::chrono::duration_cast<std::chrono::microseconds>(now - start_loop);
-                if ( elapsed.count() > interval ){
-                    sleep = false;
-                }
+        sender.send(probe_to_send);
+        bool sleep = true;
+        auto start_loop = std::chrono::system_clock::now();
 
+        // This is an active waiting but more precise than sleep().
+        while(sleep)
+        {
+            auto now = std::chrono::system_clock::now();
+            auto elapsed = std::chrono::duration_cast<std::chrono::microseconds>(now - start_loop);
+            if ( elapsed.count() > interval ){
+                sleep = false;
             }
+
         }
-        else{
-            //Wait for the last packet to get responded
+        if (probe_sent == nb_probes - 1){
             auto end = std::chrono::high_resolution_clock::now();
             std::chrono::duration<double, std::milli> elapsed = end-start;
             std::cout << "Sending took " << elapsed.count() << " ms\n";
-            std::this_thread::sleep_for(std::chrono::seconds(1));
         }
+
     }
 
 }

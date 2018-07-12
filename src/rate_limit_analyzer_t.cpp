@@ -294,10 +294,8 @@ rate_limit_analyzer_t::compute_loss_model(const std::vector<rate_limit_analyzer_
 
     std::vector<std::vector<int>> n_transitions(2, std::vector<int>(2, 0));
 
-    auto total_transitions = 0;
-
     bool previous_state = responsive_info_probes.begin()->first;
-    for (auto i = 1; i < responsive_info_probes.size(); ++i, ++total_transitions){
+    for (auto i = 1; i < responsive_info_probes.size(); ++i){
         if (responsive_info_probes[i].first == previous_state){
             if (previous_state){
                 n_transitions[0][0] += 1;
@@ -315,8 +313,11 @@ rate_limit_analyzer_t::compute_loss_model(const std::vector<rate_limit_analyzer_
     }
 
     for (int i = 0; i < n_transitions.size(); ++i){
+
+        auto total_transition_state = std::accumulate(n_transitions[i].begin(), n_transitions[i].end(), 0);
+
         for(int j = 0; j < n_transitions[i].size(); ++j){
-            loss_model.transition(i, j, static_cast<double>(n_transitions[i][j])/ total_transitions);
+            loss_model.transition(i, j, static_cast<double>(n_transitions[i][j])/ total_transition_state);
         }
     }
 

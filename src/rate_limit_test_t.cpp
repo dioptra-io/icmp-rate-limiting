@@ -62,10 +62,10 @@ void rate_limit_test_t::start() {
     rate_limit_sender.start();
     rate_limit_sniffer.set_stop_sniffing(true);
     rate_limit_sniffer.join();
-    rate_limit_analyzer.start(get_pcap_file());
-    rate_limit_analyzer.dump_loss_rate();
-    rate_limit_analyzer.dump_time_series();
-    rate_limit_analyzer.dump_gilbert_eliot();
+//    rate_limit_analyzer.start(get_pcap_file());
+//    rate_limit_analyzer.dump_loss_rate();
+//    rate_limit_analyzer.dump_time_series();
+//    rate_limit_analyzer.dump_gilbert_eliot();
 
 }
 

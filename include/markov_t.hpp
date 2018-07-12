@@ -7,6 +7,7 @@
 
 #include <vector>
 #include <iostream>
+#include <numeric>
 
 template <typename State, size_t n_state>
 class markov_t {
@@ -30,6 +31,16 @@ public:
 
     void transition(int from, int to, double new_value){
         transition_matrix[from][to] = new_value;
+    }
+
+    bool is_correct(){
+        for (int i = 0; i < transition_matrix.size(); ++i){
+            auto sum_state = std::accumulate(transition_matrix[i].begin(), transition_matrix[i].end(), 0);
+            if (sum_state != 1){
+                return false;
+            }
+        }
+        return true;
     }
 
 private:

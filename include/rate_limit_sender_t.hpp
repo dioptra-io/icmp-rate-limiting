@@ -7,7 +7,7 @@
 
 #include <tins/tins.h>
 #include <unordered_map>
-#include "probe_t.hpp"
+#include "sender_t.hpp"
 
 class rate_limit_sender_t{
 public:
@@ -25,20 +25,16 @@ public:
 
     void start();
 
-
-
 private:
     std::vector<Tins::IP> build_probing_pattern(int N);
 
     int nb_probes;
     int probing_rate;
 
-    uint8_t protocol;
-
     Tins::NetworkInterface sending_iface;
-    Tins::PacketSender sender;
     std::vector<Tins::IP> candidates;
     std::vector<Tins::IP> options_ip;
+    sender_t sender;
 
 };
 
