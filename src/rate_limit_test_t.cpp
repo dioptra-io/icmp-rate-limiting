@@ -4,7 +4,7 @@
 
 #include <tins/network_interface.h>
 #include "../include/rate_limit_test_t.hpp"
-#include "../include/container_utils_t.hpp"
+#include "utils/container_utils_t.hpp"
 
 rate_limit_test_t::rate_limit_test_t(int nb_probes, int probing_rate, const Tins::NetworkInterface &iface,
                                      const std::vector <Tins::IP> &candidates,
@@ -27,9 +27,15 @@ rate_limit_test_t::rate_limit_test_t(int nb_probes, int probing_rate, const Tins
                                      const std::unordered_map<Tins::IPv4Address, Tins::IP> &options_ips):
     rate_limit_sender{nb_probes, probing_rate, iface, values(candidates), values(options_ips)},
     rate_limit_sniffer{iface, std::unordered_set<Tins::IPv4Address>()},
-    rate_limit_analyzer{rate_limit_analyzer_t::probing_style_t::INDIRECT}
+    rate_limit_analyzer{rate_limit_analyzer_t::probing_style_t::INDIRECT, extend(candidates, options_ips)}
 {
+    for (const auto & candidate : candidates ){
+        rate_limit_sniffer.add_destination(candidate.second.dst_addr());
+    }
 
+    for (const auto & options_ip: options_ips){
+        rate_limit_sniffer.add_destination(options_ip.second.dst_addr());
+    }
 }
 
 
@@ -62,10 +68,10 @@ void rate_limit_test_t::start() {
     rate_limit_sender.start();
     rate_limit_sniffer.set_stop_sniffing(true);
     rate_limit_sniffer.join();
-//    rate_limit_analyzer.start(get_pcap_file());
-//    rate_limit_analyzer.dump_loss_rate();
-//    rate_limit_analyzer.dump_time_series();
-//    rate_limit_analyzer.dump_gilbert_eliot();
+    rate_limit_analyzer.start(get_pcap_file());
+    rate_limit_analyzer.dump_loss_rate();
+    rate_limit_analyzer.dump_time_series();
+    rate_limit_analyzer.dump_gilbert_eliot();
 
 }
 

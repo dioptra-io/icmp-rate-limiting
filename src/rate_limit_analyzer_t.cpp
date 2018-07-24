@@ -6,20 +6,29 @@
 #include <iostream>
 #include <chrono>
 #include "../include/rate_limit_analyzer_t.hpp"
-#include "../include/maths_utils_t.hpp"
+#include "utils/maths_utils_t.hpp"
 
 using namespace Tins;
+
+
+
+rate_limit_analyzer_t::rate_limit_analyzer_t(probing_style_t probing_style) : probing_style(probing_style) {
+
+}
+
+rate_limit_analyzer_t::rate_limit_analyzer_t(probing_style_t probing_style,
+                                             const std::unordered_map<Tins::IPv4Address, Tins::IP> & matchers):
+        probing_style(probing_style),
+        matchers(matchers) {
+
+}
+
 
 void rate_limit_analyzer_t::sort_by_timestamp(std::vector<Packet> & packets){
     std::sort(packets.begin(), packets.end(), [](const Packet & packet1, const Packet & packet2){
         return std::chrono::microseconds(packet1.timestamp()).count() < std::chrono::microseconds(packet2.timestamp()).count();
     });
 }
-
-rate_limit_analyzer_t::rate_limit_analyzer_t(probing_style_t probing_style) : probing_style(probing_style) {
-
-}
-
 
 double rate_limit_analyzer_t::compute_loss_rate(const std::vector<responsive_info_probe_t> & responsive_info_probes) {
     auto total_probes = responsive_info_probes.size();
@@ -48,32 +57,40 @@ std::unordered_map<Tins::IPv4Address, double> rate_limit_analyzer_t::compute_los
 rate_limit_analyzer_t::time_series_t rate_limit_analyzer_t::extract_responsiveness_time_series(const std::vector<responsive_info_probe_t> & packet_serie) {
     time_series_t time_series;
 
-    bool is_responsive = packet_serie.begin()->first;
-    std::chrono::milliseconds start_interval_time = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::microseconds(packet_serie.begin()->second.timestamp()));
-    std::chrono::milliseconds end_time_interval_time;
-    auto current_packet_number = 0;
-    bool must_flush_last_interval = true;
-    for (const auto & packet: packet_serie){
-        if (packet.first == is_responsive){
-            end_time_interval_time = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::microseconds(packet.second.timestamp()));
-            ++current_packet_number;
-            must_flush_last_interval = true;
-            continue;
-        } else {
-            // Put the new interval in the time_serie object
-            time_series.emplace_back(is_responsive, current_packet_number,std::make_pair(start_interval_time.count(), end_time_interval_time.count()));
-            // Reset the starting interval
-            start_interval_time = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::microseconds(packet.second.timestamp()));
-            end_time_interval_time = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::microseconds(packet.second.timestamp()));
-            current_packet_number = 1;
-            is_responsive = !is_responsive;
-            must_flush_last_interval = false;
+    if (!packet_serie.empty()) {
+
+        bool is_responsive = packet_serie.begin()->first;
+        std::chrono::milliseconds start_interval_time = std::chrono::duration_cast<std::chrono::milliseconds>(
+                std::chrono::microseconds(packet_serie.begin()->second.timestamp()));
+        std::chrono::milliseconds end_time_interval_time;
+        auto current_packet_number = 0;
+        bool must_flush_last_interval = true;
+        for (const auto &packet: packet_serie) {
+            if (packet.first == is_responsive) {
+                end_time_interval_time = std::chrono::duration_cast<std::chrono::milliseconds>(
+                        std::chrono::microseconds(packet.second.timestamp()));
+                ++current_packet_number;
+                must_flush_last_interval = true;
+                continue;
+            } else {
+                // Put the new interval in the time_serie object
+                time_series.emplace_back(is_responsive, current_packet_number,
+                                         std::make_pair(start_interval_time.count(), end_time_interval_time.count()));
+                // Reset the starting interval
+                start_interval_time = std::chrono::duration_cast<std::chrono::milliseconds>(
+                        std::chrono::microseconds(packet.second.timestamp()));
+                end_time_interval_time = std::chrono::duration_cast<std::chrono::milliseconds>(
+                        std::chrono::microseconds(packet.second.timestamp()));
+                current_packet_number = 1;
+                is_responsive = !is_responsive;
+                must_flush_last_interval = false;
+            }
+        }
+        if (must_flush_last_interval) {
+            time_series.emplace_back(is_responsive, current_packet_number,
+                                     std::make_pair(start_interval_time.count(), end_time_interval_time.count()));
         }
     }
-    if (must_flush_last_interval){
-        time_series.emplace_back(is_responsive, current_packet_number,std::make_pair(start_interval_time.count(), end_time_interval_time.count()));
-    }
-
     return time_series;
 }
 
@@ -188,9 +205,12 @@ void rate_limit_analyzer_t::start(const std::string &pcap_file)  {
                 try{
                     // We are in an ICMP direct probing so we match se probes with the icmp id
                     auto icmp_request = ip.find_pdu<ICMP>();
-                    if (icmp->id() == icmp_request->id()){
-                        return true;
+                    if (icmp_request != nullptr){
+                        if (icmp->id() == icmp_request->id()){
+                            return true;
+                        }
                     }
+
                 } catch (const Tins::malformed_packet & e){
                     std::cerr << e.what() << "\n";
                 }
@@ -285,41 +305,43 @@ rate_limit_analyzer_t::probing_style_t rate_limit_analyzer_t::get_probing_style(
     return probing_style;
 }
 
-rate_limit_analyzer_t::gilbert_elliot_t
-rate_limit_analyzer_t::compute_loss_model(const std::vector<rate_limit_analyzer_t::responsive_info_probe_t> & responsive_info_probes) {
+gilbert_elliot_t
+rate_limit_analyzer_t::compute_loss_model(const std::vector<responsive_info_probe_t> & responsive_info_probes) const {
     gilbert_elliot_t loss_model;
 
     // loss model : state 0 is responsive
     //              state 1 is unresponsive
 
     std::vector<std::vector<int>> n_transitions(2, std::vector<int>(2, 0));
+    if (!responsive_info_probes.empty()){
+        bool previous_state = responsive_info_probes.begin()->first;
+        for (auto i = 1; i < responsive_info_probes.size(); ++i){
+            if (responsive_info_probes[i].first == previous_state){
+                if (previous_state){
+                    n_transitions[0][0] += 1;
+                } else {
+                    n_transitions[1][1] += 1;
+                }
+            } else {
+                if (previous_state){
+                    n_transitions[0][1] += 1;
+                } else {
+                    n_transitions[1][0] += 1;
+                }
+                previous_state = !previous_state;
+            }
+        }
 
-    bool previous_state = responsive_info_probes.begin()->first;
-    for (auto i = 1; i < responsive_info_probes.size(); ++i){
-        if (responsive_info_probes[i].first == previous_state){
-            if (previous_state){
-                n_transitions[0][0] += 1;
-            } else {
-                n_transitions[1][1] += 1;
+        for (int i = 0; i < n_transitions.size(); ++i){
+
+            auto total_transition_state = std::accumulate(n_transitions[i].begin(), n_transitions[i].end(), 0);
+
+            for(int j = 0; j < n_transitions[i].size(); ++j){
+                loss_model.transition(i, j, static_cast<double>(n_transitions[i][j])/ total_transition_state);
             }
-        } else {
-            if (previous_state){
-                n_transitions[0][1] += 1;
-            } else {
-                n_transitions[1][0] += 1;
-            }
-            previous_state = !previous_state;
         }
     }
 
-    for (int i = 0; i < n_transitions.size(); ++i){
-
-        auto total_transition_state = std::accumulate(n_transitions[i].begin(), n_transitions[i].end(), 0);
-
-        for(int j = 0; j < n_transitions[i].size(); ++j){
-            loss_model.transition(i, j, static_cast<double>(n_transitions[i][j])/ total_transition_state);
-        }
-    }
 
     return loss_model;
 }
@@ -333,12 +355,30 @@ void rate_limit_analyzer_t::dump_gilbert_eliot() {
     });
 }
 
-void rate_limit_analyzer_t::dump_transition_matrix(const rate_limit_analyzer_t::gilbert_elliot_t &loss_model) {
+void rate_limit_analyzer_t::dump_transition_matrix(const gilbert_elliot_t &loss_model) {
     std::cout << "P(R, R) = " << loss_model.transition(0, 0) << "\n";
     std::cout << "P(R, U) = " << loss_model.transition(0, 1) << "\n";
     std::cout << "P(U, R) = " << loss_model.transition(1, 0) << "\n";
     std::cout << "P(U, U) = " << loss_model.transition(1, 1) << "\n";
 }
+
+rate_limit_analyzer_t::time_series_t rate_limit_analyzer_t::get_responsiveness(const Tins::IPv4Address & address) {
+    return extract_responsiveness_time_series(packets_per_interface[address]);
+}
+
+double rate_limit_analyzer_t::compute_loss_rate(const IPv4Address & ip) {
+    return compute_loss_rate(packets_per_interface[ip]);
+}
+
+std::vector<rate_limit_analyzer_t::responsive_info_probe_t> rate_limit_analyzer_t::get_raw_packets(const IPv4Address & ip) const {
+    return packets_per_interface.at(ip);
+}
+
+gilbert_elliot_t rate_limit_analyzer_t::compute_loss_model(const Tins::IPv4Address &address) const{
+    return compute_loss_model(packets_per_interface.at(address));
+}
+
+
 
 
 

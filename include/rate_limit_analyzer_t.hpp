@@ -10,6 +10,7 @@
 #include <tins/tins.h>
 #include "rate_limit_estimate_t.hpp"
 #include "markov_t.hpp"
+#include "alias_t.hpp"
 
 class rate_limit_analyzer_t {
 
@@ -21,7 +22,9 @@ public:
 
     using intervals_t = std::tuple<bool, double, double>;
 
-    rate_limit_analyzer_t(probing_style_t);
+    explicit rate_limit_analyzer_t(probing_style_t);
+
+    rate_limit_analyzer_t(probing_style_t, const std::unordered_map<Tins::IPv4Address, Tins::IP> & );
 
     using port_ttl_ip_t = std::tuple<uint16_t, uint8_t, Tins::IPv4Address>;
     using responsive_info_probe_t = std::pair<bool, Tins::Packet>;
@@ -37,9 +40,10 @@ public:
 
     std::unordered_map<Tins::IPv4Address, double> compute_loss_rate();
 
+    double compute_loss_rate(const Tins::IPv4Address & ip);
 
-    using gilbert_elliot_t = markov_t<int, 2>;
-    gilbert_elliot_t compute_loss_model(const std::vector<responsive_info_probe_t> & );
+    gilbert_elliot_t compute_loss_model(const Tins::IPv4Address & address) const;
+
 
 
     void dump_loss_rate();
@@ -47,7 +51,8 @@ public:
     void dump_gilbert_eliot();
 
     probing_style_t get_probing_style() const;
-
+    std::vector<responsive_info_probe_t> get_raw_packets(const Tins::IPv4Address & ) const;
+    time_series_t get_responsiveness(const Tins::IPv4Address &);
 
 private:
     // To match unresponsive probes with their original ip.
@@ -55,6 +60,7 @@ private:
 
     // Private functions to compute statistics indicators.
     double compute_loss_rate(const std::vector<responsive_info_probe_t> &);
+    gilbert_elliot_t compute_loss_model(const std::vector<responsive_info_probe_t> & ) const;
     time_series_t extract_responsiveness_time_series(const std::vector <responsive_info_probe_t> &);
 
     rate_limit_estimate_t compute_mean_stddev(const time_series_t & );

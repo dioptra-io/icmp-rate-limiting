@@ -5,7 +5,9 @@
 #ifndef ICMPRATELIMITING_TINS_UTILS_T_HPP
 #define ICMPRATELIMITING_TINS_UTILS_T_HPP
 #include <tins/tins.h>
-namespace TinsUtils{
+#include <unordered_map>
+
+namespace utils{
     template <typename T>
     class HandlerProxy {
     public:
@@ -28,6 +30,7 @@ namespace TinsUtils{
                                          typename HandlerProxy<T>::fun_type function) {
         return HandlerProxy<T>(ptr, function);
     }
-}
+
+    std::unordered_map<Tins::IPv4Address, Tins::IP> retrieve_matchers(const std::string & file_name);
 
 #endif //ICMPRATELIMITING_TINS_UTILS_T_HPP

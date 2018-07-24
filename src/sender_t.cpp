@@ -6,6 +6,7 @@
 #include <netinet/in.h>
 #include <cerrno>
 #include <dnet.h>
+#include <fcntl.h>
 
 #include "../include/sender_t.hpp"
 
@@ -29,6 +30,13 @@ int sender_t::open_L3_socket(int family, int type, int protocol) {
         exit(EXIT_FAILURE);
     }
 
+    // Set non blocking socket mode
+    int status = fcntl(socket_fd, F_SETFL, fcntl(socket_fd, F_GETFL, 0) | O_NONBLOCK);
+
+    if (status == -1){
+        perror("calling fcntl");
+        // handle the error.  By the way, I've never seen fcntl fail in this way
+    }
     return socket_fd;
 
 }
@@ -86,6 +94,13 @@ void sender_t::send(Tins::PDU &pdu) {
     auto ip = pdu.rfind_pdu<IP>();
     auto link_addr = get_sockaddr_in(ip.dst_addr());
     send_l3_socket(socket_fd, pdu, (struct sockaddr*)&link_addr, sizeof(link_addr));
+}
+
+sender_t::~sender_t() {
+    if(close(socket_fd) < 0){
+        perror("close");
+    }
+
 }
 
 

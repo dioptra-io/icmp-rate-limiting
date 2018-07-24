@@ -24,7 +24,7 @@ rate_limit_sender_t::rate_limit_sender_t(int nb_probes, int probing_rate, const 
         options_ip{options_ip},
         sender(AF_INET, SOCK_RAW, candidates[0].protocol())
 {
-    sender.set_buffer_size(sender.get_buffer_size(SO_SNDBUF) * 64);
+    sender.set_buffer_size(sender.get_buffer_size(SO_SNDBUF) * 256);
 }
 
 rate_limit_sender_t::rate_limit_sender_t(const rate_limit_sender_t &copy_rate_limit_sender):
@@ -35,7 +35,7 @@ rate_limit_sender_t::rate_limit_sender_t(const rate_limit_sender_t &copy_rate_li
         options_ip{copy_rate_limit_sender.options_ip},
         sender{AF_INET, SOCK_RAW, candidates[0].protocol()}
 {
-    sender.set_buffer_size(sender.get_buffer_size(SO_SNDBUF) * 64);
+    sender.set_buffer_size(sender.get_buffer_size(SO_SNDBUF) * 256);
 }
 
 std::vector<Tins::IP> rate_limit_sender_t::build_probing_pattern(int N) {
@@ -65,9 +65,6 @@ std::vector<Tins::IP> rate_limit_sender_t::build_probing_pattern(int N) {
 
 void rate_limit_sender_t::start() {
     auto interval = 1000000/probing_rate;
-    if(interval < 1000){
-        interval = -1;
-    }
     int probe_sent = 0;
 
     // Every N packets, we send a pair-packet.

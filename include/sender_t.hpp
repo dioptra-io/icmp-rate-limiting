@@ -29,7 +29,11 @@ public:
 
         return link_addr;
     }
+    ~sender_t();
+
+
 private:
+
 
     int open_L3_socket(int family, int type, int protocol);
     void send_l3_socket(int socket, Tins::PDU& pdu, struct sockaddr* link_addr, uint32_t len_addr);

@@ -3,5 +3,24 @@ project(ICMPRateLimiting)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_FLAGS -Werror)
-add_executable(ICMPRateLimiting icmp_trigger.cpp include/sender_t.hpp src/sender_t.cpp include/rate_limit_sender_t.hpp include/rate_limit_sniffer_t.hpp include/rate_limit_test_t.hpp src/rate_limit_sniffer_t.cpp src/rate_limit_analyzer_t.cpp include/rate_limit_analyzer_t.hpp include/maths_utils_t.hpp src/rate_limit_estimate_t.cpp include/rate_limit_estimate_t.hpp src/rate_limit_sender_t.cpp src/rate_limit_test_t.cpp include/container_utils_t.hpp include/tins_utils_t.hpp src/markov_t.cpp include/markov_t.hpp)
+
+file(GLOB SOURCES src/*.cpp)
+file(GLOB EXTERNAL_SOURCES EasyBMP_1/*.cpp)
+include_directories(include)
+include_directories(EasyBMP_1)
+
+
+
+add_executable(ICMPRateLimiting icmp_trigger.cpp ${SOURCES})
 target_link_libraries(ICMPRateLimiting Tins)
+
+
+set(Boost_USE_STATIC_LIBS OFF)
+set(Boost_USE_MULTITHREADED ON)
+set(Boost_USE_STATIC_RUNTIME OFF)
+find_package(Boost REQUIRED COMPONENTS filesystem iostreams)
+if(Boost_FOUND)
+    include_directories(${Boost_INCLUDE_DIRS})
+    add_executable(ICMPPlot icmp_plot.cpp ${SOURCES} ${EXTERNAL_SOURCES})
+    target_link_libraries(ICMPPlot Tins ${Boost_LIBRARIES})
+endif()
