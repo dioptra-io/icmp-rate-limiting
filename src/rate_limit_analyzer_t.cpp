@@ -10,7 +10,7 @@
 
 using namespace Tins;
 
-
+using namespace utils;
 
 rate_limit_analyzer_t::rate_limit_analyzer_t(probing_style_t probing_style) : probing_style(probing_style) {
 

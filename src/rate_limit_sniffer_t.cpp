@@ -9,6 +9,8 @@
 #include "../include/rate_limit_sniffer_t.hpp"
 #include "utils/tins_utils_t.hpp"
 using namespace Tins;
+using namespace utils;
+
 
 rate_limit_sniffer_t::rate_limit_sniffer_t(const Tins::NetworkInterface & interface, const std::unordered_set<IPv4Address> & destinations):
         interface(interface),
@@ -37,7 +39,7 @@ void rate_limit_sniffer_t::start() {
     sniffer_ptr = std::make_unique<Sniffer>(interface.name(), config);
     // Launch sniffing thread.
     sniffer_thread = std::thread{([&]() {
-        sniffer_ptr->sniff_loop(TinsUtils::make_sniffer_handler(this,  &rate_limit_sniffer_t::handler));
+        sniffer_ptr->sniff_loop(utils::make_sniffer_handler(this,  &rate_limit_sniffer_t::handler));
     })};
 }
 

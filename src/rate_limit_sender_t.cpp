@@ -40,25 +40,8 @@ rate_limit_sender_t::rate_limit_sender_t(const rate_limit_sender_t &copy_rate_li
 
 std::vector<Tins::IP> rate_limit_sender_t::build_probing_pattern(int N) {
     std::vector<IP> probing_pattern;
-    if (N == 0){
-        probing_pattern.push_back(candidates[0]);
-    }
-
-    for (int i = 0; i < N/2; ++i){
-        probing_pattern.push_back(candidates[0]);
-    }
-
-    for (int i = 1; i < candidates.size(); ++i){
-        probing_pattern.push_back(candidates[i]);
-    }
-
-    for (int i = 0; i < options_ip.size(); ++i){
-        probing_pattern.push_back(options_ip[i]);
-    }
-
-    for(int i = N/2; i < N; ++i){
-        probing_pattern.push_back(candidates[0]);
-    }
+    std::copy(candidates.begin(), candidates.end(), std::back_inserter(probing_pattern));
+    std::copy(options_ip.begin(), options_ip.end(), std::back_inserter(probing_pattern));
 
     return probing_pattern;
 }

@@ -4,16 +4,10 @@ project(ICMPRateLimiting)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_FLAGS -Werror)
 
-file(GLOB SOURCES src/*.cpp)
+file(GLOB SOURCES src/*.cpp src/utils/*.cpp)
 file(GLOB EXTERNAL_SOURCES EasyBMP_1/*.cpp)
 include_directories(include)
 include_directories(EasyBMP_1)
-
-
-
-add_executable(ICMPRateLimiting icmp_trigger.cpp ${SOURCES})
-target_link_libraries(ICMPRateLimiting Tins)
-
 
 set(Boost_USE_STATIC_LIBS OFF)
 set(Boost_USE_MULTITHREADED ON)
@@ -22,5 +16,7 @@ find_package(Boost REQUIRED COMPONENTS filesystem iostreams)
 if(Boost_FOUND)
     include_directories(${Boost_INCLUDE_DIRS})
     add_executable(ICMPPlot icmp_plot.cpp ${SOURCES} ${EXTERNAL_SOURCES})
+    add_executable(ICMPRateLimiting icmp_trigger.cpp ${SOURCES} ${EXTERNAL_SOURCES})
+    target_link_libraries(ICMPRateLimiting Tins ${Boost_LIBRARIES})
     target_link_libraries(ICMPPlot Tins ${Boost_LIBRARIES})
 endif()

@@ -5,6 +5,7 @@
 #include "../include/rate_limit_plotter_t.hpp"
 #include "../EasyBMP_1/EasyBMP.h"
 
+using namespace utils;
 
 void rate_limit_plotter_t::plot_loss_rate_gilbert_eliott(const std::vector<double> &losses,
                                                          const std::vector<int> &rates,

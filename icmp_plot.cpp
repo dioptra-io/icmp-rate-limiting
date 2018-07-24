@@ -34,7 +34,7 @@ namespace {
 
         sort_functor_t(sort_by_t sort_by):sort_by(sort_by){}
 
-        bool operator()(const struct_utils::stats_t & stats_ip1, const struct_utils::stats_t & stats_ip2) const {
+        bool operator()(const stats_t & stats_ip1, const stats_t & stats_ip2) const {
             if(sort_by == sort_by_t::TRIGGERING_PROBING_RATE){
                 return stats_ip1.triggering_probing_rate < stats_ip2.triggering_probing_rate;
             } else if (sort_by == sort_by_t::LOSS_RATE){
@@ -84,7 +84,7 @@ int main (int argc, char*argv[]){
     icmp_types.emplace_back("icmp_ttl_exceeded");
 
 
-    using stats_t = struct_utils::stats_t;
+    using stats_t = stats_t;
 
     // Debug hack
 //    ips.resize(20);

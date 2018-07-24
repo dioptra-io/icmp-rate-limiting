@@ -50,10 +50,10 @@ public:
 
     void plot_bitmap_raw(const std::unordered_map<Tins::IPv4Address, std::vector<responsive_info_probe_t>> & raw_data, const std::string & title);
     template<typename Sort>
-    void plot_aggregate(const std::unordered_map<Tins::IPv4Address, struct_utils::stats_t> & stats_by_ip, const plot_infos_t & plot_infos,  Sort sort){
+    void plot_aggregate(const std::unordered_map<Tins::IPv4Address, utils::stats_t> & stats_by_ip, const plot_infos_t & plot_infos,  Sort sort){
         // First sort the data by Sort. X axis will be the IP, Y the values
-        using stats_t = struct_utils::stats_t;
-        std::vector<stats_t> sorted_stats = values(stats_by_ip);
+        using stats_t = utils::stats_t;
+        std::vector<stats_t> sorted_stats = utils::values(stats_by_ip);
         std::sort(sorted_stats.begin(), sorted_stats.end(), [sort](const stats_t & stat_ip1, const stats_t & stat_ip2){
             return sort(stat_ip1, stat_ip2);
         });

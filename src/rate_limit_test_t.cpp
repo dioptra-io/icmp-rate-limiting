@@ -6,6 +6,8 @@
 #include "../include/rate_limit_test_t.hpp"
 #include "utils/container_utils_t.hpp"
 
+using namespace utils;
+
 rate_limit_test_t::rate_limit_test_t(int nb_probes, int probing_rate, const Tins::NetworkInterface &iface,
                                      const std::vector <Tins::IP> &candidates,
                                      const std::vector <Tins::IP> &options_ips):
