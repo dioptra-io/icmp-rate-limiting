@@ -20,6 +20,15 @@ namespace utils{
         return result;
     }
 
+    template<typename Map>
+    std::vector<typename Map::key_type> keys(const Map & map){
+        std::vector<typename Map::key_type> result;
+        std::transform(map.begin(), map.end(), std::back_inserter(result), [](const auto & pair){
+            return pair.first;
+        });
+        return result;
+    }
+
     template< typename T, typename Pred >
     typename std::vector<T>::iterator
     insert_sorted(std::vector<T> & vec, const T & item, Pred pred )

@@ -9,34 +9,24 @@
 using namespace utils;
 
 rate_limit_test_t::rate_limit_test_t(int nb_probes, int probing_rate, const Tins::NetworkInterface &iface,
-                                     const std::vector <Tins::IP> &candidates,
-                                     const std::vector <Tins::IP> &options_ips):
-        rate_limit_sender{nb_probes, probing_rate, iface, candidates, options_ips},
+                                     const std::vector <Tins::IP> & probes):
+        rate_limit_sender{nb_probes, probing_rate, iface, probes},
         rate_limit_sniffer{iface, std::unordered_set<Tins::IPv4Address>()},
         rate_limit_analyzer{rate_limit_analyzer_t::probing_style_t::DIRECT}
 {
-    for (const auto & candidate : candidates ){
-        rate_limit_sniffer.add_destination(candidate.dst_addr());
-    }
-
-    for (const auto & options_ip: options_ips){
-        rate_limit_sniffer.add_destination(options_ip.dst_addr());
+    for (const auto & probe : probes ){
+        rate_limit_sniffer.add_destination(probe.dst_addr());
     }
 }
 
 rate_limit_test_t::rate_limit_test_t(int nb_probes, int probing_rate, const Tins::NetworkInterface &iface,
-                                     const std::unordered_map<Tins::IPv4Address, Tins::IP> &candidates,
-                                     const std::unordered_map<Tins::IPv4Address, Tins::IP> &options_ips):
-    rate_limit_sender{nb_probes, probing_rate, iface, values(candidates), values(options_ips)},
+                                     const std::unordered_map<Tins::IPv4Address, Tins::IP> &probes):
+    rate_limit_sender{nb_probes, probing_rate, iface, values(probes)},
     rate_limit_sniffer{iface, std::unordered_set<Tins::IPv4Address>()},
-    rate_limit_analyzer{rate_limit_analyzer_t::probing_style_t::INDIRECT, extend(candidates, options_ips)}
+    rate_limit_analyzer{rate_limit_analyzer_t::probing_style_t::INDIRECT, probes}
 {
-    for (const auto & candidate : candidates ){
-        rate_limit_sniffer.add_destination(candidate.second.dst_addr());
-    }
-
-    for (const auto & options_ip: options_ips){
-        rate_limit_sniffer.add_destination(options_ip.second.dst_addr());
+    for (const auto & probe : probes ){
+        rate_limit_sniffer.add_destination(probe.second.dst_addr());
     }
 }
 

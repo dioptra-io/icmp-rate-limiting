@@ -30,9 +30,7 @@ public:
     rate_limit_test_t(int nb_probes,
                       int probing_rate,
                       const Tins::NetworkInterface & iface,
-                      const std::vector<Tins::IP> & candidates,
-                      const std::vector<Tins::IP> & options_ips
-                      );
+                      const std::vector<Tins::IP> & candidates);
 
 
     /**
@@ -48,9 +46,7 @@ public:
     rate_limit_test_t(int nb_probes,
                       int probing_rate,
                       const Tins::NetworkInterface & iface,
-                      const std::unordered_map<Tins::IPv4Address, Tins::IP> & candidates,
-                      const std::unordered_map<Tins::IPv4Address, Tins::IP> & options_ips
-    );
+                      const std::unordered_map<Tins::IPv4Address, Tins::IP> & candidates);
 
 
     rate_limit_test_t(const rate_limit_sender_t & , const rate_limit_sniffer_t & , const rate_limit_analyzer_t &);

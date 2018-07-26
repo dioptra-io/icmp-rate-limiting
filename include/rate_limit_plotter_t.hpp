@@ -8,6 +8,7 @@
 #include <tins/tins.h>
 #include <unordered_map>
 
+#include <EasyBMP.h>
 #include "gnuplot-iostream.h"
 #include "markov_t.hpp"
 #include "utils/struct_utils_t.hpp"
@@ -90,9 +91,33 @@ public:
 
     }
 
+    /**
+     * Plot a bitmap representing responsiveness for an ip.
+     * @param raw_data
+     * @param title
+     */
     void plot_bitmap_ip(const std::pair<Tins::IPv4Address, std::unordered_map<int, std::vector<responsive_info_probe_t>>> & raw_data, const std::string & title);
-private:
-    void plot_bitmap_internal(const std::vector<std::vector<responsive_info_probe_t>> & raw_data, const std::string & title);
+
+    void plot_bitmap_router_rate(const std::unordered_map<Tins::IPv4Address, std::vector<responsive_info_probe_t>> & candidates,
+                                 const std::unordered_map<Tins::IPv4Address, std::vector<responsive_info_probe_t>> & witness,
+                                 const std::string & title);
+
+    /**
+     * Plot a bitmap representing the responsiveness for an alias set and its witnesses.
+     *
+     * Contract (White): Every candidate and witness must have the same number of rates
+     * @param candidates
+     * @param witnesses
+     * @param title
+     */
+    void plot_bitmap_router(
+            const std::unordered_map<Tins::IPv4Address, std::unordered_map<int, std::vector<rate_limit_plotter_t::responsive_info_probe_t>>> &candidates,
+            const std::unordered_map<Tins::IPv4Address, std::unordered_map<int, std::vector<rate_limit_plotter_t::responsive_info_probe_t>>> &witnesses,
+            const std::string & title);
+    private:
+    void plot_bitmap_internal(const std::vector<std::vector<rate_limit_plotter_t::responsive_info_probe_t>> &raw_data,
+                                               const std::string &title);
+    void plot_bitmap_internal(const std::vector<std::pair<RGBApixel, std::vector<responsive_info_probe_t>>> & raw_data, const std::string & title);
 };
 
 

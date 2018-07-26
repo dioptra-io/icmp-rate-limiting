@@ -5,7 +5,29 @@
 #include "../include/rate_limit_plotter_t.hpp"
 #include "../EasyBMP_1/EasyBMP.h"
 
+
 using namespace utils;
+
+namespace{
+    RGBApixel white {255, 255, 255};
+    RGBApixel black {0, 0, 0, 255};
+    RGBApixel red   {0, 0, 255, 255};
+
+    std::vector<std::pair<RGBApixel, std::vector<rate_limit_plotter_t::responsive_info_probe_t>>> add_color(const std::vector<std::vector<rate_limit_plotter_t::responsive_info_probe_t>> & sorted_vector,
+                                                                                                            const RGBApixel & color){
+        std::vector<std::pair<RGBApixel, std::vector<rate_limit_plotter_t::responsive_info_probe_t>>> raw_data_color;
+
+        for (const auto & raw: sorted_vector){
+            raw_data_color.push_back(std::make_pair(color, raw));
+        }
+
+        return raw_data_color;
+    }
+    // Add the colors
+
+
+}
+
 
 void rate_limit_plotter_t::plot_loss_rate_gilbert_eliott(const std::vector<double> &losses,
                                                          const std::vector<int> &rates,
@@ -110,51 +132,6 @@ void rate_limit_plotter_t::plot_bitmap_raw(
     }
 
     plot_bitmap_internal(vector_raw, title);
-
-//    // Find the maximum width
-//
-//    auto it = std::max_element(raw_data.begin(), raw_data.end(), [](const auto & raw_data1, const auto & raw_data2){
-//        return raw_data1.second.size() < raw_data2.second.size();
-//    });
-//
-//    int offset = 100;
-//
-//    std::size_t width_resolution = static_cast<std::size_t >(it->second.size() + offset);
-//
-//    std::size_t height_resolution = static_cast<std::size_t>(3.0/4 * width_resolution);
-//
-//    std::size_t limit_height = 4 * raw_data.size();
-//
-//    if (height_resolution < limit_height) {
-//        height_resolution = limit_height;
-//    }
-//    std::size_t interval_between_line = height_resolution / raw_data.size();
-//
-//
-//    BMP image;
-//    image.SetSize(width_resolution, height_resolution);
-//    RGBApixel white {255, 255, 255};
-//    RGBApixel black {0, 0, 0};
-//
-//    // Init the pixels
-//    for (int i = 0; i < image.TellWidth(); ++i){
-//        for(int j = 0; j < image.TellHeight(); ++j){
-//            image.SetPixel(i, j, white);
-//        }
-//    }
-//
-//    // Loop on every two pixel lines.
-//    for (int i = 0; i < vector_raw.size(); ++i){
-//        for(int j = 0; j <vector_raw[i].size(); ++j){
-////            image.SetPixel(j, i, white);
-//            if (vector_raw[i][j].first){
-//                for (int k = 0; k < interval_between_line/2; ++k){
-//                    image.SetPixel( j, interval_between_line*i + k, black);
-//                }
-//            }
-//        }
-//    }
-//    image.WriteToFile(title.c_str());
 }
 
 void rate_limit_plotter_t::plot_bitmap_ip(
@@ -163,24 +140,33 @@ void rate_limit_plotter_t::plot_bitmap_ip(
 
         auto sorted_vector = values_sorted_by_keys(raw_data.second);
 
+
         plot_bitmap_internal(sorted_vector, title);
 
 }
 
+void rate_limit_plotter_t::plot_bitmap_internal(
+        const std::vector<std::vector<rate_limit_plotter_t::responsive_info_probe_t>> &raw_data,
+        const std::string &title) {
+
+    plot_bitmap_internal(add_color(raw_data, black), title);
+
+}
+
 void
-rate_limit_plotter_t::plot_bitmap_internal(const std::vector<std::vector<rate_limit_plotter_t::responsive_info_probe_t>> &raw_data,
+rate_limit_plotter_t::plot_bitmap_internal(const std::vector<std::pair<RGBApixel, std::vector<rate_limit_plotter_t::responsive_info_probe_t>>> &raw_data,
                                            const std::string &title) {
 
 
     // Find the maximum width
 
     auto it = std::max_element(raw_data.begin(), raw_data.end(), [](const auto & raw_data1, const auto & raw_data2){
-        return raw_data1.size() < raw_data2.size();
+        return raw_data1.second.size() < raw_data2.second.size();
     });
 
-    int offset = 100;
+    int offset = 0;
 
-    std::size_t width_resolution = static_cast<std::size_t >(it->size() + offset);
+    std::size_t width_resolution = static_cast<std::size_t >(it->second.size() + offset);
 
     std::size_t height_resolution = static_cast<std::size_t>(3.0/4 * width_resolution);
 
@@ -194,8 +180,7 @@ rate_limit_plotter_t::plot_bitmap_internal(const std::vector<std::vector<rate_li
 
     BMP image;
     image.SetSize(width_resolution, height_resolution);
-    RGBApixel white {255, 255, 255};
-    RGBApixel black {0, 0, 0, 255};
+
 
     // Init the pixels
     for (int i = 0; i < image.TellWidth(); ++i){
@@ -206,14 +191,70 @@ rate_limit_plotter_t::plot_bitmap_internal(const std::vector<std::vector<rate_li
 
     // Loop on every two pixel lines.
     for (int i = 0; i < raw_data.size(); ++i){
-        for(int j = 0; j < raw_data[i].size(); ++j){
+        for(int j = 0; j < raw_data[i].second.size(); ++j){
 //            image.SetPixel(j, i, white);
-            if (raw_data[i][j].first){
+            if (raw_data[i].second[j].first){
                 for (int k = 0; k < interval_between_line/2; ++k){
-                    image.SetPixel( j, interval_between_line*i + k, black);
+                    image.SetPixel( j, interval_between_line*i + k, raw_data[i].first);
                 }
             }
         }
     }
     image.WriteToFile(title.c_str());
 }
+
+
+
+void rate_limit_plotter_t::plot_bitmap_router_rate(
+        const std::unordered_map<Tins::IPv4Address, std::vector<rate_limit_plotter_t::responsive_info_probe_t>> &candidates,
+        const std::unordered_map<Tins::IPv4Address, std::vector<rate_limit_plotter_t::responsive_info_probe_t>> &witnesses,
+        const std::string & title) {
+
+    // Two different colors for witnesses and alias
+    auto alias_v = values(candidates);
+    auto alias_v_color = add_color(alias_v, black);
+
+    auto witnesses_v = values(witnesses);
+    auto witnesses_v_color = add_color(witnesses_v, red);
+
+    decltype(alias_v_color) v;
+
+    std::copy(alias_v_color.begin(), alias_v_color.end(), std::back_inserter(v));
+    std::copy(witnesses_v_color.begin(), witnesses_v_color.end(), std::back_inserter(v));
+
+    plot_bitmap_internal(v, title);
+
+}
+
+void rate_limit_plotter_t::plot_bitmap_router(
+        const std::unordered_map<Tins::IPv4Address, std::unordered_map<int, std::vector<rate_limit_plotter_t::responsive_info_probe_t>>> &candidates,
+        const std::unordered_map<Tins::IPv4Address, std::unordered_map<int, std::vector<rate_limit_plotter_t::responsive_info_probe_t>>> &witnesses,
+        const std::string &title) {
+
+    auto ip_addresses_candidates = keys(candidates);
+    auto ip_addresses_witnesses  = keys(witnesses);
+
+    // Extract the different rates, they must be the same for all candidates and witnesses
+    auto rates = keys(candidates.at(ip_addresses_candidates[0]));
+
+    std::sort(rates.begin(), rates.end());
+
+    std::vector<std::pair<RGBApixel, std::vector<rate_limit_plotter_t::responsive_info_probe_t>>> ordered_data;
+
+    for (const auto & rate : rates){
+
+        for (const auto & ip_candidate : ip_addresses_candidates){
+            ordered_data.push_back(std::make_pair(black, candidates.at(ip_candidate).at(rate)));
+        }
+
+        for (const auto & ip_witness : ip_addresses_witnesses){
+            ordered_data.push_back(std::make_pair(red, witnesses.at(ip_witness).at(rate)));
+        }
+    }
+
+    plot_bitmap_internal(ordered_data, title);
+
+}
+
+
+

@@ -16,12 +16,15 @@
 
 #include <boost/filesystem.hpp>
 
-#include "include/utils/file_utils_t.hpp"
-#include "include/utils/tins_utils_t.hpp"
-#include "include/utils/container_utils_t.hpp"
 
-#include "include/sender_t.hpp"
-#include "include/rate_limit_test_t.hpp"
+#include <utils/file_utils_t.hpp>
+#include <utils/tins_utils_t.hpp>
+#include <utils/container_utils_t.hpp>
+#include <sender_t.hpp>
+#include <rate_limit_test_t.hpp>
+#include <icmp_trigger_probes_t.hpp>
+
+
 using namespace Tins;
 
 using namespace utils;
@@ -34,37 +37,7 @@ namespace {
         return pcap_file_stream.str();
     }
 
-    struct icmp_trigger_probes_t{
-        IP icmp_ttl_exceeded;
-        IP icmp_dst_unreachable;
-        IP icmp_echo_reply;
-    };
-
-    bool operator == (const icmp_trigger_probes_t & triplet1, const icmp_trigger_probes_t & triplet2 ){
-        return triplet1.icmp_echo_reply.dst_addr() == triplet2.icmp_echo_reply.dst_addr();
-    }
-    enum class icmp_messages_t{
-        ICMP_TTL_EXCEEDED = ICMP::Flags::TIME_EXCEEDED,
-        ICMP_DST_UNREACHABLE = ICMP::Flags::DEST_UNREACHABLE,
-        ICMP_ECHO_REPLY = ICMP::Flags::ECHO_REPLY
-    };
-
     uint8_t  test_ttl = 7;
-
-    IP build_icmp_triggering_probe(const IPv4Address & dst_ip, const IPv4Address & src_ip,  uint16_t sport, uint16_t dport, uint8_t ttl, ICMP::Flags icmp_type){
-        IP icmp_triggering_probe;
-        if (icmp_type == ICMP::TIME_EXCEEDED or icmp_type == ICMP::DEST_UNREACHABLE){
-            icmp_triggering_probe = IP(dst_ip, src_ip)/UDP(dport, sport);
-        } else if (icmp_type == ICMP::ECHO_REPLY){
-            icmp_triggering_probe = IP(dst_ip, src_ip) / ICMP();
-        }
-        if (icmp_type == ICMP::TIME_EXCEEDED){
-            icmp_triggering_probe.ttl(ttl);
-        } else {
-            icmp_triggering_probe.ttl(64);
-        }
-        return icmp_triggering_probe;
-    }
 
     std::pair<bool, IPv4Address> is_responsive(const IPv4Address & dst_ip, const IPv4Address src_ip, ICMP::Flags icmp_type){
         PacketSender test_sender;
@@ -91,7 +64,7 @@ namespace {
 
         // Find the TTL-Exceeding message at TTL 6
 
-        auto icmp_triggering_probe = build_icmp_triggering_probe(dst_ip, src_ip, 24000, 34345, test_ttl, icmp_type);
+        auto icmp_triggering_probe = build_icmp_triggering_probe(dst_ip, src_ip, 24000, 33435, test_ttl, icmp_type);
 
 
         test_sender.send(icmp_triggering_probe);
@@ -184,8 +157,8 @@ int main(int argc, char ** argv) {
                 auto is_pingable = is_responsive(target_ip, sniff_interface.ipv4_address(), ICMP::ECHO_REPLY);
 
                 if (is_pingable.first or is_traceroutable.first){
-                    auto ttl_exceeded_probe = build_icmp_triggering_probe(address, sniff_interface.ipv4_address(), 24000, 34345, test_ttl, ICMP::TIME_EXCEEDED);
-                    auto dst_unreachable_probe = build_icmp_triggering_probe(target_ip, sniff_interface.ipv4_address(),  24000, 34345, 0, ICMP::DEST_UNREACHABLE);
+                    auto ttl_exceeded_probe = build_icmp_triggering_probe(address, sniff_interface.ipv4_address(), 24000, 33435, test_ttl, ICMP::TIME_EXCEEDED);
+                    auto dst_unreachable_probe = build_icmp_triggering_probe(target_ip, sniff_interface.ipv4_address(),  24000, 33435, 0, ICMP::DEST_UNREACHABLE);
                     auto echo_reply_probe = build_icmp_triggering_probe(target_ip, sniff_interface.ipv4_address(), 0, 0, 0, ICMP::Flags::ECHO_REPLY);
 
                     icmp_trigger_probes_t candidate_to_add {ttl_exceeded_probe, dst_unreachable_probe, echo_reply_probe};
@@ -205,12 +178,22 @@ int main(int argc, char ** argv) {
     }
 
     std::string input_dir {"resources/1/"};
-    std::string output_dir {"resources/2/"};
+//    std::string output_dir {"resources/2/"};
+    std::string output_dir {"resources/multiple/"};
 
     if (is_addresses_from_file){
-        path address_dir("resources/1/");
+        path address_dir(input_dir);
+        path reprobe_address_dir(output_dir);
+
         auto ip_addresses_str = extract_ips_from_filenames(address_dir);
         for (const auto & ip_address_str : ip_addresses_str){
+            // if all probes already in 2/ skip this interface
+            std::stringstream existing_file;
+            existing_file << output_dir  << "icmp_ttl_exceeded_" << ip_address_str << "_" << std::to_string(8192) << ".pcap";
+            if (exists(path(existing_file.str()))){
+                continue;
+            }
+
             // Find the corresponding pcap files 2.
 
             // First ttl-exceeded probe
@@ -221,48 +204,33 @@ int main(int argc, char ** argv) {
             // Third destination unreachable file
             IP dest_unreachable_probe = find_probe_from_file(address_dir.string(), ip_address_str, "icmp_unreachable", 2);
 
-            test_addresses.push_back({ttl_exceeded_probe, echo_reply_probe, dest_unreachable_probe});
+            test_addresses.push_back({ttl_exceeded_probe, dest_unreachable_probe, echo_reply_probe});
         }
     }
 
 
 
     if (is_multiple_addresses_from_file){
-        path address_dir("resources/triplets/");
+        path address_dir("resources/routers/");
 
         // Parse the .router files, one triplet by router.
         for (directory_iterator itr(address_dir); itr!=directory_iterator(); ++itr){
             alias_test_t alias_test;
 
             std::string file_name {itr->path().string()};
-            // Parse the file_name so we retrieve the destination
-            std::vector<std::string> file_name_tokens;
-            split(file_name, file_name_tokens, '_');
 
-            auto indirect_address = file_name_tokens[0];
-
-            std::ifstream infile(file_name);
-
-
-
-            // Each line correspond to a ttl_exceeded probe, so parse and build it
-            std::string line;
-            std::vector<std::string> tokens;
-            while (std::getline(infile, line))
-            {
-                split(line, tokens, ' ');
-                auto target_ip = tokens[0];
-                auto ttl = static_cast<uint8_t>(std::atoi(tokens[1].c_str()));
-                auto flow_id = static_cast<uint16_t>(std::atoi(tokens[2].c_str())) + 24000;
-
-                // Build the different probes
-                auto ttl_exceeded_probe = build_icmp_triggering_probe(indirect_address, sniff_interface.ipv4_address(), flow_id, 34345, ttl, ICMP::TIME_EXCEEDED);
-                auto dst_unreachable_probe = build_icmp_triggering_probe(target_ip, sniff_interface.ipv4_address(),  24000, 34345, 0, ICMP::DEST_UNREACHABLE);
-                auto echo_reply_probe = build_icmp_triggering_probe(target_ip, sniff_interface.ipv4_address(), 0, 0, 0, ICMP::Flags::ECHO_REPLY);
-
-                alias_test.push_back(icmp_trigger_probes_t{ttl_exceeded_probe, dst_unreachable_probe, echo_reply_probe});
+            // Debug hack
+            if (file_name != std::string("resources/routers/38.46.191.67_0.router")){
+                continue;
             }
-            alias_tests.push_back(alias_test);
+
+            alias_test = extract_icmp_trigger_probes_from_file(file_name, sniff_interface.ipv4_address());
+
+            // Hack here to just keep the 2 first and the witness
+            alias_test_t test_2_and_witness (alias_test.begin(), alias_test.begin()+2);
+            test_2_and_witness.push_back(*(alias_test.end()-1));
+
+            alias_tests.push_back(test_2_and_witness);
         }
 
     }
@@ -273,76 +241,70 @@ int main(int argc, char ** argv) {
 
     for (const auto & alias_set : alias_tests){
 
-        for (const auto & icmp_triggering_triplet : test_addresses){
+        char separator = '_';
 
-            std::cout << "Starting to evaluate rate limiting for:" << icmp_triggering_triplet.icmp_dst_unreachable.dst_addr().to_string() << "\n";
+        // Direct UDP
+        std::vector <Tins::IP> direct_udp_probes;
 
-            for(int i = 1; pow(2, i) < max_probing_rate; ++i){
-                // Probing rate represents the number of packets to send in 1 sec
-                auto probing_rate = static_cast<int>(pow(2, i));
-                auto nb_probes = 3 * probing_rate;
+        // Direct ICMP
+        std::vector <Tins::IP> direct_icmp_probes;
 
-                // UDP direct, put a very high dst port.
-                std::vector <Tins::IP> direct_udp_candidates_probes;
-                direct_udp_candidates_probes.push_back(icmp_triggering_triplet.icmp_dst_unreachable);
-                std::vector <Tins::IP> direct_udp_candidates_probes_options;
-//            if (before_address != IPv4Address()){
-//                auto probe_dst_option_before = IP(before_address)/UDP(default_dport, default_sport);
-//                direct_udp_candidates_probes_options.push_back(probe_dst_option_before);
-//            }
-                rate_limit_test_t udp_direct_test(nb_probes, probing_rate, sniff_interface,
-                                                  direct_udp_candidates_probes, direct_udp_candidates_probes_options);
-                udp_direct_test.set_pcap_file(build_pcap_name(output_dir, "icmp_unreachable", icmp_triggering_triplet.icmp_dst_unreachable.dst_addr().to_string(), probing_rate));
-                //udp_direct_test.set_before_address(default_sport, default_dport, "4.69.111.194");
+        // Indirect UDP
+        std::unordered_map<Tins::IPv4Address, Tins::IP> indirect_udp_probes;
 
-                std::cout << "UDP direct probing for " << icmp_triggering_triplet.icmp_dst_unreachable.dst_addr().to_string() << " with probing rate " << probing_rate <<  "...\n";
-                udp_direct_test.start();
+        std::cout << "Starting to evaluate rate limiting for:" << to_string(alias_set) << "\n";
+        for (const auto & icmp_triggering_triplet : alias_set) {
 
-                std::this_thread::sleep_for(std::chrono::seconds(2));
+            // Add the direct UDP probe
+            direct_udp_probes.push_back(icmp_triggering_triplet.get_icmp_dst_unreachable());
 
+            // Add the direct ICMP probe
+            direct_icmp_probes.push_back(icmp_triggering_triplet.get_icmp_echo_reply());
 
-                // ICMP direct
-                std::vector <Tins::IP> direct_icmp_candidates_probes;
-                direct_icmp_candidates_probes.push_back(icmp_triggering_triplet.icmp_echo_reply);
-                std::vector <Tins::IP> direct_icmp_candidates_probes_options;
-//            if (before_address != IPv4Address()){
-//                auto probe_dst_option_before = IP(before_address)/ICMP();
-//                direct_icmp_candidates_probes_options.push_back(probe_dst_option_before);
-//            }
-                rate_limit_test_t icmp_direct_test(nb_probes, probing_rate, sniff_interface, direct_icmp_candidates_probes, direct_icmp_candidates_probes_options);
+            // Add the indirect UDP probe
+            indirect_udp_probes.insert(std::make_pair(icmp_triggering_triplet.test_address(),
+                                                                 icmp_triggering_triplet.get_icmp_ttl_exceeded()));
+        }
 
+        for(int i = 10; pow(2, i) < max_probing_rate; ++i){
+            // Probing rate represents the number of packets to send in 1 sec
+            auto probing_rate = static_cast<int>(pow(2, i));
+            auto nb_probes = 5 * probing_rate;
 
-                icmp_direct_test.set_pcap_file(build_pcap_name(output_dir, "icmp_echo_reply", icmp_triggering_triplet.icmp_echo_reply.dst_addr().to_string(), probing_rate));
+            rate_limit_test_t udp_direct_test(nb_probes, probing_rate, sniff_interface,
+                                              direct_udp_probes);
+            udp_direct_test.set_pcap_file(build_pcap_name(output_dir, "icmp_unreachable", to_file_name(alias_set, separator), probing_rate));
 
-                std::cout << "ICMP direct probing for " << icmp_triggering_triplet.icmp_dst_unreachable.dst_addr().to_string() <<  " with probing rate " << probing_rate <<"...\n";
-                icmp_direct_test.start();
+            std::cout << "UDP direct probing for " << to_string(alias_set) << " with probing rate " << probing_rate <<  "...\n";
+            udp_direct_test.start();
 
-                std::this_thread::sleep_for(std::chrono::seconds(2));
+            std::this_thread::sleep_for(std::chrono::seconds(2));
 
 
-                // Indirect UDP test
-                std::unordered_map<Tins::IPv4Address, Tins::IP> indirect_udp_candidates_probes;
-                indirect_udp_candidates_probes.insert(std::make_pair(icmp_triggering_triplet.icmp_echo_reply.dst_addr(), icmp_triggering_triplet.icmp_ttl_exceeded));
-                std::unordered_map<Tins::IPv4Address, Tins::IP> indirect_udp_candidates_probes_options;
-
-                rate_limit_test_t udp_indirect_test(nb_probes, probing_rate, sniff_interface, indirect_udp_candidates_probes, indirect_udp_candidates_probes_options);
-
-                udp_indirect_test.set_pcap_file(build_pcap_name(output_dir, "icmp_ttl_exceeded", icmp_triggering_triplet.icmp_echo_reply.dst_addr().to_string(), probing_rate));
-                std::cout << "UDP indirect probing for " << icmp_triggering_triplet.icmp_dst_unreachable.dst_addr().to_string() << " with probing rate " << probing_rate << "...\n";
-
-                udp_indirect_test.start();
-                std::this_thread::sleep_for(std::chrono::seconds(2));
+            // ICMP direct test
+            rate_limit_test_t icmp_direct_test(nb_probes, probing_rate, sniff_interface, direct_icmp_probes);
 
 
-            }
+            icmp_direct_test.set_pcap_file(build_pcap_name(output_dir, "icmp_echo_reply", to_file_name(alias_set, separator), probing_rate));
+
+            std::cout << "ICMP direct probing for " << to_string(alias_set) <<  " with probing rate " << probing_rate <<"...\n";
+            icmp_direct_test.start();
+
+            std::this_thread::sleep_for(std::chrono::seconds(2));
+
+
+            // Indirect UDP test
+
+            rate_limit_test_t udp_indirect_test(nb_probes, probing_rate, sniff_interface, indirect_udp_probes);
+
+            udp_indirect_test.set_pcap_file(build_pcap_name(output_dir, "icmp_ttl_exceeded", to_file_name(alias_set, separator), probing_rate));
+            std::cout << "UDP indirect probing for " << to_string(alias_set) << " with probing rate " << probing_rate << "...\n";
+
+            udp_indirect_test.start();
+            std::this_thread::sleep_for(std::chrono::seconds(2));
+
+        }
     }
-
-
-
-    }
-
-
-
 
     return 0;
 }

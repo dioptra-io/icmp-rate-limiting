@@ -16,8 +16,7 @@ public:
     rate_limit_sender_t(int nb_probes,
                         int probing_rate,
                         const Tins::NetworkInterface & iface,
-                        const std::vector<Tins::IP> & candidates,
-                        const std::vector<Tins::IP> & options_ip);
+                        const std::vector<Tins::IP> & candidates);
 
     rate_limit_sender_t(const rate_limit_sender_t & copy_rate_limit_sender);
 
@@ -33,7 +32,6 @@ private:
 
     Tins::NetworkInterface sending_iface;
     std::vector<Tins::IP> candidates;
-    std::vector<Tins::IP> options_ip;
     sender_t sender;
 
 };

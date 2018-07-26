@@ -15,13 +15,11 @@ namespace{
 }
 
 rate_limit_sender_t::rate_limit_sender_t(int nb_probes, int probing_rate, const Tins::NetworkInterface &iface,
-                                         const std::vector<Tins::IP> &candidates,
-                                         const std::vector<Tins::IP> &options_ip):
+                                         const std::vector<Tins::IP> &candidates):
         nb_probes{nb_probes},
         probing_rate{probing_rate},
         sending_iface{iface},
         candidates{candidates},
-        options_ip{options_ip},
         sender(AF_INET, SOCK_RAW, candidates[0].protocol())
 {
     sender.set_buffer_size(sender.get_buffer_size(SO_SNDBUF) * 256);
@@ -32,7 +30,6 @@ rate_limit_sender_t::rate_limit_sender_t(const rate_limit_sender_t &copy_rate_li
         probing_rate{copy_rate_limit_sender.probing_rate},
         sending_iface{copy_rate_limit_sender.sending_iface},
         candidates{copy_rate_limit_sender.candidates},
-        options_ip{copy_rate_limit_sender.options_ip},
         sender{AF_INET, SOCK_RAW, candidates[0].protocol()}
 {
     sender.set_buffer_size(sender.get_buffer_size(SO_SNDBUF) * 256);
@@ -41,7 +38,6 @@ rate_limit_sender_t::rate_limit_sender_t(const rate_limit_sender_t &copy_rate_li
 std::vector<Tins::IP> rate_limit_sender_t::build_probing_pattern(int N) {
     std::vector<IP> probing_pattern;
     std::copy(candidates.begin(), candidates.end(), std::back_inserter(probing_pattern));
-    std::copy(options_ip.begin(), options_ip.end(), std::back_inserter(probing_pattern));
 
     return probing_pattern;
 }
@@ -95,7 +91,7 @@ void rate_limit_sender_t::start() {
 rate_limit_sender_t rate_limit_sender_t::reverse() const  {
     std::vector<IP> reverse_candidates;
     std::reverse_copy(candidates.begin(), candidates.end(), std::back_inserter(reverse_candidates));
-    return rate_limit_sender_t(nb_probes, probing_rate, sending_iface, reverse_candidates, options_ip);
+    return rate_limit_sender_t(nb_probes, probing_rate, sending_iface, reverse_candidates);
 }
 
 

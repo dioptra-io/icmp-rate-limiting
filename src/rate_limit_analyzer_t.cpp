@@ -5,8 +5,8 @@
 #include <unordered_map>
 #include <iostream>
 #include <chrono>
-#include "../include/rate_limit_analyzer_t.hpp"
-#include "utils/maths_utils_t.hpp"
+#include <rate_limit_analyzer_t.hpp>
+#include <utils/maths_utils_t.hpp>
 
 using namespace Tins;
 
