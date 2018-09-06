@@ -55,7 +55,7 @@ int sender_t::get_buffer_size(int buffer_type) {
         return -1;
     }
     else{
-        fprintf(stderr, "send buffer size = %d\n", sendbuff);
+//        fprintf(stderr, "send buffer size = %d\n", sendbuff);
         return sendbuff;
     }
 }

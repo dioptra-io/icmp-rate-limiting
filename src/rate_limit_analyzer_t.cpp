@@ -30,7 +30,7 @@ void rate_limit_analyzer_t::sort_by_timestamp(std::vector<Packet> & packets){
     });
 }
 
-double rate_limit_analyzer_t::compute_loss_rate(const std::vector<responsive_info_probe_t> & responsive_info_probes) {
+double rate_limit_analyzer_t::compute_loss_rate(const std::vector<responsive_info_probe_t> & responsive_info_probes) const{
     auto total_probes = responsive_info_probes.size();
     auto nb_responsive_probes = 0.0;
     auto nb_unresponsive_probes = 0.0;
@@ -249,10 +249,11 @@ void rate_limit_analyzer_t::start(const std::string &pcap_file)  {
                 // Match the ip probe with the destination in case of direct probing
                 dst_ip = ip.dst_addr();
             } else if (probing_style == probing_style_t::INDIRECT){
-                    // Match the ip probe with the sport in case of indirect probing
+                // Match the ip probe with the sport in case of indirect probing
                 for (const auto & matcher : matchers){
                     if (match_probe(matcher.second, ip)){
                         dst_ip = matcher.first;
+                        break;
                     }
                 }
 
@@ -271,7 +272,7 @@ void rate_limit_analyzer_t::start(const std::string &pcap_file)  {
 }
 
 bool rate_limit_analyzer_t::match_probe(const Tins::IP & match, const Tins::IP & probe) {
-    const UDP* match_transport_udp = probe.find_pdu<UDP>();
+    const UDP* match_transport_udp = match.find_pdu<UDP>();
     const TCP* match_transport_tcp = nullptr;
     uint16_t match_sport = 0;
     auto match_ttl = match.ttl();
@@ -290,7 +291,7 @@ bool rate_limit_analyzer_t::match_probe(const Tins::IP & match, const Tins::IP &
     uint16_t sport = 0;
     auto ttl = probe.ttl();
     if (transport_udp == nullptr){
-        transport_tcp = match.find_pdu<TCP>();
+        transport_tcp = probe.find_pdu<TCP>();
         if(transport_tcp!=nullptr){
             sport = transport_tcp->sport();
         }
@@ -301,7 +302,7 @@ bool rate_limit_analyzer_t::match_probe(const Tins::IP & match, const Tins::IP &
     return sport == match_sport and ttl == match_ttl;
 }
 
-rate_limit_analyzer_t::probing_style_t rate_limit_analyzer_t::get_probing_style() const {
+probing_style_t rate_limit_analyzer_t::get_probing_style() const {
     return probing_style;
 }
 
@@ -366,16 +367,64 @@ rate_limit_analyzer_t::time_series_t rate_limit_analyzer_t::get_responsiveness(c
     return extract_responsiveness_time_series(packets_per_interface[address]);
 }
 
-double rate_limit_analyzer_t::compute_loss_rate(const IPv4Address & ip) {
-    return compute_loss_rate(packets_per_interface[ip]);
+double rate_limit_analyzer_t::compute_loss_rate(const IPv4Address & ip) const {
+    return compute_loss_rate(packets_per_interface.at(ip));
 }
 
-std::vector<rate_limit_analyzer_t::responsive_info_probe_t> rate_limit_analyzer_t::get_raw_packets(const IPv4Address & ip) const {
-    return packets_per_interface.at(ip);
+std::vector<responsive_info_probe_t> rate_limit_analyzer_t::get_raw_packets(const IPv4Address & ip) const {
+    try {
+        return packets_per_interface.at(ip);
+    } catch (const std::out_of_range & e){
+        std::cerr << "Keys found:\n";
+        for (const auto & pair : packets_per_interface){
+            std::cerr << pair.first << "\n";
+        }
+        std::cerr << "Was looking for key " << ip << "\n";
+        std::cerr << "Error: May be network dynamics.\n";
+    }
+    return std::vector<responsive_info_probe_t>();
 }
 
 gilbert_elliot_t rate_limit_analyzer_t::compute_loss_model(const Tins::IPv4Address &address) const{
     return compute_loss_model(packets_per_interface.at(address));
+}
+
+packet_interval_t rate_limit_analyzer_t::compute_icmp_triggering_rate(
+        const std::vector<responsive_info_probe_t> &data) const {
+    double loss_rate_treshold = 0.2;
+    int interval_length = 100;
+
+    int triggering_loss_rate = -1;
+    for (int i = 0; i < data.size() - interval_length; i += interval_length/2){
+        auto last_index = data.begin();
+        if ((i + 2 * interval_length) < data.size()){
+          last_index = data.begin() + i + interval_length;
+        } else {
+            break;
+        }
+
+        std::vector <responsive_info_probe_t> responsiveness_interval(data.begin() + i, last_index);
+        auto loss_rate_interval = compute_loss_rate(responsiveness_interval);
+
+        if (loss_rate_interval > loss_rate_treshold){
+            triggering_loss_rate = i;
+            break;
+        }
+    }
+    if (triggering_loss_rate == -1){
+        return std::make_pair(triggering_loss_rate, triggering_loss_rate);
+    }
+    return std::make_pair(triggering_loss_rate, triggering_loss_rate + interval_length);
+}
+
+std::unordered_map<IPv4Address, packet_interval_t>
+rate_limit_analyzer_t::compute_icmp_triggering_rate() const {
+    std::unordered_map<IPv4Address, packet_interval_t> icmp_triggering_rate;
+    for (const auto & responsiveness_ip : packets_per_interface){
+        auto triggering_rate = compute_icmp_triggering_rate(responsiveness_ip.second);
+        icmp_triggering_rate[responsiveness_ip.first] = triggering_rate;
+    }
+    return icmp_triggering_rate;
 }
 
 

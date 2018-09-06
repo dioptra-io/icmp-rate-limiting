@@ -15,6 +15,12 @@
 #include "container_utils_t.hpp"
 
 namespace utils{
+    std::string build_pcap_name(std::string folder, std::string icmp_type, std::string destination, int rate){
+        std::stringstream pcap_file_stream;
+        pcap_file_stream << folder << icmp_type << "_" << destination << "_" << rate << ".pcap";
+        return pcap_file_stream.str();
+    }
+
     std::vector<std::string> extract_ips_from_filenames(const boost::filesystem::path & pcap_directory) {
 //        std::regex ipv4_regex {"([0–9]{1,3}\\.){3}\\.([0–9]{1,3})"};
         std::regex ipv4_regex ("([0-9]{1,3}\\.){3}([0-9]{1,3})");
@@ -35,7 +41,8 @@ namespace utils{
         return ips;
     }
 
-    std::vector<icmp_trigger_probes_t> extract_icmp_trigger_probes_from_file(const std::string & file_name, const Tins::IPv4Address & source){
+    std::vector<icmp_trigger_probes_t> build_icmp_trigger_probes_from_file(const std::string &file_name,
+                                                                           const Tins::IPv4Address &source){
         std::vector<icmp_trigger_probes_t> alias_test;
 
         std::ifstream infile(file_name);

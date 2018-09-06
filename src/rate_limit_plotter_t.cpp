@@ -3,19 +3,21 @@
 //
 
 #include "../include/rate_limit_plotter_t.hpp"
+
+#include "../include/utils/maths_utils_t.hpp"
 #include "../EasyBMP_1/EasyBMP.h"
 
-
 using namespace utils;
+using namespace Tins;
 
 namespace{
     RGBApixel white {255, 255, 255};
     RGBApixel black {0, 0, 0, 255};
     RGBApixel red   {0, 0, 255, 255};
 
-    std::vector<std::pair<RGBApixel, std::vector<rate_limit_plotter_t::responsive_info_probe_t>>> add_color(const std::vector<std::vector<rate_limit_plotter_t::responsive_info_probe_t>> & sorted_vector,
+    std::vector<std::pair<RGBApixel, std::vector<responsive_info_probe_t>>> add_color(const std::vector<std::vector<responsive_info_probe_t>> & sorted_vector,
                                                                                                             const RGBApixel & color){
-        std::vector<std::pair<RGBApixel, std::vector<rate_limit_plotter_t::responsive_info_probe_t>>> raw_data_color;
+        std::vector<std::pair<RGBApixel, std::vector<responsive_info_probe_t>>> raw_data_color;
 
         for (const auto & raw: sorted_vector){
             raw_data_color.push_back(std::make_pair(color, raw));
@@ -103,7 +105,7 @@ void rate_limit_plotter_t::plot_loss_rate_gilbert_eliott(const std::vector<doubl
 
 }
 
-void rate_limit_plotter_t::plot_raw(const std::vector<rate_limit_plotter_t::responsive_info_probe_t> &packets) {
+void rate_limit_plotter_t::plot_raw(const std::vector<responsive_info_probe_t> &packets) {
     Gnuplot gp;
 
     std::vector<std::pair<long long int, int>> responsiveness;
@@ -123,7 +125,7 @@ void rate_limit_plotter_t::plot_raw(const std::vector<rate_limit_plotter_t::resp
 
 
 void rate_limit_plotter_t::plot_bitmap_raw(
-        const std::unordered_map<Tins::IPv4Address, std::vector<rate_limit_plotter_t::responsive_info_probe_t>> &raw_data, const std::string & title) {
+        const std::unordered_map<Tins::IPv4Address, std::vector<responsive_info_probe_t>> &raw_data, const std::string & title) {
 
     auto vector_raw = values(raw_data);
 
@@ -135,7 +137,7 @@ void rate_limit_plotter_t::plot_bitmap_raw(
 }
 
 void rate_limit_plotter_t::plot_bitmap_ip(
-        const std::pair<Tins::IPv4Address, std::unordered_map<int, std::vector<rate_limit_plotter_t::responsive_info_probe_t>>> &raw_data,
+        const std::pair<Tins::IPv4Address, std::unordered_map<int, std::vector<responsive_info_probe_t>>> &raw_data,
         const std::string &title) {
 
         auto sorted_vector = values_sorted_by_keys(raw_data.second);
@@ -146,7 +148,7 @@ void rate_limit_plotter_t::plot_bitmap_ip(
 }
 
 void rate_limit_plotter_t::plot_bitmap_internal(
-        const std::vector<std::vector<rate_limit_plotter_t::responsive_info_probe_t>> &raw_data,
+        const std::vector<std::vector<responsive_info_probe_t>> &raw_data,
         const std::string &title) {
 
     plot_bitmap_internal(add_color(raw_data, black), title);
@@ -154,7 +156,7 @@ void rate_limit_plotter_t::plot_bitmap_internal(
 }
 
 void
-rate_limit_plotter_t::plot_bitmap_internal(const std::vector<std::pair<RGBApixel, std::vector<rate_limit_plotter_t::responsive_info_probe_t>>> &raw_data,
+rate_limit_plotter_t::plot_bitmap_internal(const std::vector<std::pair<RGBApixel, std::vector<responsive_info_probe_t>>> &raw_data,
                                            const std::string &title) {
 
 
@@ -206,8 +208,8 @@ rate_limit_plotter_t::plot_bitmap_internal(const std::vector<std::pair<RGBApixel
 
 
 void rate_limit_plotter_t::plot_bitmap_router_rate(
-        const std::unordered_map<Tins::IPv4Address, std::vector<rate_limit_plotter_t::responsive_info_probe_t>> &candidates,
-        const std::unordered_map<Tins::IPv4Address, std::vector<rate_limit_plotter_t::responsive_info_probe_t>> &witnesses,
+        const std::unordered_map<Tins::IPv4Address, std::vector<responsive_info_probe_t>> &candidates,
+        const std::unordered_map<Tins::IPv4Address, std::vector<responsive_info_probe_t>> &witnesses,
         const std::string & title) {
 
     // Two different colors for witnesses and alias
@@ -227,8 +229,8 @@ void rate_limit_plotter_t::plot_bitmap_router_rate(
 }
 
 void rate_limit_plotter_t::plot_bitmap_router(
-        const std::unordered_map<Tins::IPv4Address, std::unordered_map<int, std::vector<rate_limit_plotter_t::responsive_info_probe_t>>> &candidates,
-        const std::unordered_map<Tins::IPv4Address, std::unordered_map<int, std::vector<rate_limit_plotter_t::responsive_info_probe_t>>> &witnesses,
+        const std::unordered_map<Tins::IPv4Address, std::unordered_map<int, std::vector<responsive_info_probe_t>>> &candidates,
+        const std::unordered_map<Tins::IPv4Address, std::unordered_map<int, std::vector<responsive_info_probe_t>>> &witnesses,
         const std::string &title) {
 
     auto ip_addresses_candidates = keys(candidates);
@@ -239,7 +241,7 @@ void rate_limit_plotter_t::plot_bitmap_router(
 
     std::sort(rates.begin(), rates.end());
 
-    std::vector<std::pair<RGBApixel, std::vector<rate_limit_plotter_t::responsive_info_probe_t>>> ordered_data;
+    std::vector<std::pair<RGBApixel, std::vector<responsive_info_probe_t>>> ordered_data;
 
     for (const auto & rate : rates){
 
@@ -256,5 +258,145 @@ void rate_limit_plotter_t::plot_bitmap_router(
 
 }
 
+double rate_limit_plotter_t::correlation(const std::vector<responsive_info_probe_t> &raw_router_1,
+                                         const std::vector<responsive_info_probe_t> &raw_router_2) {
 
+
+
+    auto responsive_to_binary = [](const responsive_info_probe_t & responsive_info_probe){
+        return responsive_info_probe.first ? 1 : 0;
+    };
+
+    std::vector<double> X;
+    std::transform(raw_router_1.begin(), raw_router_1.end(), std::back_inserter(X), responsive_to_binary);
+    std::vector<double> Y;
+    std::transform(raw_router_2.begin(), raw_router_2.end(), std::back_inserter(Y), responsive_to_binary);
+
+    auto cor = cov_correlation(X, Y).second;
+
+    return cor;
+}
+
+std::vector<std::pair<int, rate_limit_plotter_t::correlation_matrix_t>> rate_limit_plotter_t::compute_correlation_matrix(
+        const std::unordered_map<Tins::IPv4Address, std::unordered_map<int, std::vector<responsive_info_probe_t>>> &candidates,
+        const std::unordered_map<Tins::IPv4Address, std::unordered_map<int, std::vector<responsive_info_probe_t>>> &witnesses,
+        const std::string &title) {
+
+    auto ip_addresses_candidates = keys(candidates);
+    auto ip_addresses_witnesses  = keys(witnesses);
+    // Extract the different rates, they must be the same for all candidates and witnesses
+    auto rates = keys(candidates.at(ip_addresses_candidates[0]));
+    std::sort(rates.begin(), rates.end());
+
+
+    std::vector<IPv4Address> all_ips (ip_addresses_candidates);
+    for (const auto & ip : ip_addresses_witnesses){
+        all_ips.push_back(ip);
+    }
+    auto last_index_candidate = ip_addresses_candidates.size() - 1;
+
+    std::size_t random_variables_n = all_ips.size();
+
+
+
+
+    std::vector<std::pair<int, correlation_matrix_t>> correlation_matrices;
+
+    for (const auto & rate : rates){
+        auto correlation_matrix_rate = compute_correlation_matrix(random_variables_n, last_index_candidate, rate, all_ips, candidates, witnesses);
+        correlation_matrices.push_back(std::make_pair(rate, correlation_matrix_rate));
+    }
+
+    return correlation_matrices;
+}
+
+
+std::vector<std::vector<double>> rate_limit_plotter_t::compute_correlation_matrix(std::size_t random_variables_n,
+                                                                                  std::size_t last_index_candidate,
+                                                                                  int rate,
+                                                                                  const std::vector<IPv4Address> & all_ips,
+                                                                                  const std::unordered_map<Tins::IPv4Address, std::unordered_map<int, std::vector<responsive_info_probe_t>>> &candidates,
+                                                                                  const std::unordered_map<Tins::IPv4Address, std::unordered_map<int, std::vector<responsive_info_probe_t>>> &witnesses){
+
+    std::vector<std::vector<double>> correlations_matrix(random_variables_n, std::vector<double>(random_variables_n, 0));
+    for (int i = 0; i < all_ips.size(); ++i){
+        for (int j = i; j <  all_ips.size(); ++j){
+            std::vector<responsive_info_probe_t> raw_i;
+            std::vector<responsive_info_probe_t> raw_j;
+            if (i <= last_index_candidate){
+                raw_i = candidates.at(all_ips[i]).at(rate);
+            } else {
+                raw_i = witnesses.at(all_ips[i]).at(rate);
+            }
+
+            if (j <= last_index_candidate){
+                raw_j = candidates.at(all_ips[j]).at(rate);
+            } else {
+                raw_j = witnesses.at(all_ips[j]).at(rate);
+            }
+            correlations_matrix[i][j] = correlation(raw_i, raw_j);
+        }
+    }
+
+    return correlations_matrix;
+}
+
+std::string rate_limit_plotter_t::dump_correlation_matrix(const std::vector<std::vector<double>> &matrix, int digit_number) {
+
+    std::stringstream matrix_stream;
+    for (int i = 0; i < matrix.size(); ++i){
+        matrix_stream << "|";
+        for (int j = 0; j < i; ++j){
+            for (int k = 0; k <= digit_number+2; ++k){
+                matrix_stream << " ";
+            }
+            matrix_stream << "|";
+        }
+        for (int j = i; j < matrix[i].size(); ++j){
+            auto cor = matrix[i][j];
+            std::string cor_str = std::to_string(cor);
+            // Max number of character. One for sign, one for.
+            cor_str.resize(digit_number+3);
+            matrix_stream << cor_str << "|";
+        }
+        matrix_stream << "\n";
+    }
+
+    return matrix_stream.str();
+}
+
+void rate_limit_plotter_t::plot_correlation_matrix(
+        const std::unordered_map<Tins::IPv4Address, std::unordered_map<int, std::vector<responsive_info_probe_t>>> &candidates,
+        const std::unordered_map<Tins::IPv4Address, std::unordered_map<int, std::vector<responsive_info_probe_t>>> &witnesses,
+        const std::string &title) {
+
+    auto correlation_matrices = compute_correlation_matrix(candidates, witnesses, title);
+    std::ofstream output_file;
+    output_file.open (title);
+
+    for (const auto & matrix : correlation_matrices){
+        auto dump_matrix = dump_correlation_matrix(matrix.second, 3);
+        output_file << "Rate: " << matrix.first << "\n";
+        std::cout << "Rate: " << matrix.first << "\n";
+        output_file << dump_matrix << "\n";
+        std::cout << dump_matrix << "\n";
+    }
+    output_file.close();
+
+
+
+
+}
+
+std::stringstream
+rate_limit_plotter_t::dump_loss_rate(const std::unordered_map<Tins::IPv4Address, std::unordered_map<int, double>> & loss_rates) {
+    std::stringstream stream;
+    for (const auto & ip_address_loss_rate : loss_rates){
+        stream << ip_address_loss_rate.first.to_string() << "\n";
+        for (const auto & rates_loss : ip_address_loss_rate.second){
+            stream << "Loss for rate " << rates_loss.first <<": " << rates_loss.second << "\n";
+        }
+    }
+    return stream;
+}
 

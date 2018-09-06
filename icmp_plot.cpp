@@ -62,10 +62,6 @@ namespace {
         return rates;
     }
 
-    enum class interface_type_t{
-        ALIAS, WITNESS
-    };
-
     struct icmp_trigger_probe_type_t{
         interface_type_t interface_type;
         icmp_trigger_probes_t icmp_trigger_probes;
@@ -98,8 +94,9 @@ int main (int argc, char*argv[]){
 
     std::vector<std::string> icmp_types;
     icmp_types.emplace_back("icmp_echo_reply");
-    icmp_types.emplace_back("icmp_unreachable");
-    icmp_types.emplace_back("icmp_ttl_exceeded");
+//    icmp_types.emplace_back("icmp_unreachable");
+//    icmp_types.emplace_back("icmp_ttl_exceeded");
+
 
 
     using stats_t = stats_t;
@@ -132,7 +129,8 @@ int main (int argc, char*argv[]){
             std::string file_name{itr->path().string()};
 
             // Open the file and reconstruct the probes
-            auto router_probes = extract_icmp_trigger_probes_from_file(file_name, NetworkInterface::default_interface().ipv4_address());
+            auto router_probes = build_icmp_trigger_probes_from_file(file_name,
+                                                                     NetworkInterface::default_interface().ipv4_address());
 
             router_probes_t router_with_itype;
 
@@ -140,7 +138,7 @@ int main (int argc, char*argv[]){
                 if (i == router_probes.size() - 1){
                     router_with_itype.push_back(icmp_trigger_probe_type_t{interface_type_t ::WITNESS, router_probes[i]});
                 } else {
-                    router_with_itype.push_back(icmp_trigger_probe_type_t{interface_type_t ::ALIAS, router_probes[i]});
+                    router_with_itype.push_back(icmp_trigger_probe_type_t{interface_type_t ::CANDIDATE, router_probes[i]});
                 }
             }
 
@@ -158,7 +156,6 @@ int main (int argc, char*argv[]){
             std::unordered_map<IPv4Address, stats_t> stats_by_ip;
 
             // For show_bmp_raw
-            using responsive_info_probe_t = rate_limit_plotter_t::responsive_info_probe_t;
             std::unordered_map<IPv4Address, std::unordered_map<int, std::vector<responsive_info_probe_t>>> raw_data_by_ip_rate;
 
             auto ip_number = 0;
@@ -179,11 +176,11 @@ int main (int argc, char*argv[]){
                     file_name << icmp_type << "_" << test_ip << "_" << std::to_string(probing_rate) << ".pcap";
 
 
-                    rate_limit_analyzer_t::probing_style_t probing_style;
+                    probing_style_t probing_style;
                     if (icmp_type == "icmp_ttl_exceeded"){
-                        probing_style = rate_limit_analyzer_t::probing_style_t::INDIRECT;
+                        probing_style = probing_style_t::INDIRECT;
                     } else {
-                        probing_style = rate_limit_analyzer_t::probing_style_t::DIRECT;
+                        probing_style = probing_style_t::DIRECT;
                     }
 
                     std::string absolute_path = current_path().string() + "/" +pcap_directory.string() + file_name.str();
@@ -308,6 +305,7 @@ int main (int argc, char*argv[]){
             }
 
         }
+
         else{
             // Here we want to show correlation between ICMP rate limiting for multiple interfaces
             // Debug hack here to only take 2 aliases.
@@ -326,16 +324,19 @@ int main (int argc, char*argv[]){
 
             for (const auto & router_probes: routers){
 
+//                if (router_probes[1].icmp_trigger_probes.test_address() != "112.174.236.22"){
+//                    continue;
+//                }
+
                 std::stringstream pcap_file_prefix;
                 pcap_file_prefix << icmp_type << "_";
 
 
-                using responsive_info_probe_t = rate_limit_plotter_t::responsive_info_probe_t;
 
                 std::unordered_map<IPv4Address, std::unordered_map<int, std::vector<responsive_info_probe_t>>> raw_routers_all_rates;
                 std::unordered_map<IPv4Address, std::unordered_map<int, std::vector<responsive_info_probe_t>>> raw_witnesses_all_rates;
 
-                rate_limit_analyzer_t::probing_style_t probing_style {rate_limit_analyzer_t::probing_style_t::DIRECT};
+                probing_style_t probing_style {probing_style_t::DIRECT};
 
                 std::unordered_map<IPv4Address, IP> matchers;
 
@@ -349,12 +350,12 @@ int main (int argc, char*argv[]){
 
                     if (icmp_type == "icmp_ttl_exceeded"){
                         matchers.insert(std::make_pair(ip_probes.icmp_trigger_probes.test_address(), ip_probes.icmp_trigger_probes.get_icmp_ttl_exceeded()));
-                        if (probing_style == rate_limit_analyzer_t::probing_style_t::DIRECT){
-                            probing_style = rate_limit_analyzer_t::probing_style_t::INDIRECT;
+                        if (probing_style == probing_style_t::DIRECT){
+                            probing_style = probing_style_t::INDIRECT;
                         }
                     }
 
-                    if (ip_probes.interface_type == interface_type_t::ALIAS){
+                    if (ip_probes.interface_type == interface_type_t::CANDIDATE){
                         // Init the aggregate rates maps
                         raw_routers_all_rates.insert(std::make_pair(ip_probes.icmp_trigger_probes.test_address(),
                                                                     std::unordered_map<int, std::vector<responsive_info_probe_t>>()));
@@ -372,6 +373,8 @@ int main (int argc, char*argv[]){
                     std::stringstream pcap_file;
                     pcap_file << routers_pcap_directory <<  pcap_file_prefix.str() << std::to_string(rate) << ".pcap";
 
+                    std::cout << "Plotting rate: " << rate << "\n";
+
                     try{
                         rate_limit_analyzer_t analyzer {probing_style, matchers};
                         std::string pcap_file_str = pcap_file.str();
@@ -379,6 +382,10 @@ int main (int argc, char*argv[]){
 //                            std::cout << "TRUE\n";
 //                        }
                         analyzer.start(pcap_file_str);
+                        auto triggering_rates_by_ip = analyzer.compute_icmp_triggering_rate();
+                        for (const auto & triggering_rates : triggering_rates_by_ip){
+                            std::cout << triggering_rates.first << ": (" << triggering_rates.second.first << ", " << triggering_rates.second.second << ")\n";
+                        }
 
                         rate_limit_plotter_t plotter;
 
@@ -413,8 +420,13 @@ int main (int argc, char*argv[]){
 
                 std::stringstream output_file;
                 output_file << "plots/raw/routers/" << pcap_file_prefix.str() << ".bmp";
+
                 rate_limit_plotter_t plotter;
                 plotter.plot_bitmap_router(raw_routers_all_rates, raw_witnesses_all_rates, output_file.str());
+
+                std::stringstream correlation_title;
+                correlation_title << "plots/raw/routers/" << pcap_file_prefix.str() << ".correlation";
+                plotter.plot_correlation_matrix(raw_routers_all_rates, raw_witnesses_all_rates, correlation_title.str());
             }
         }
     }

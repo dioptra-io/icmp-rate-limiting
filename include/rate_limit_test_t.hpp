@@ -12,8 +12,7 @@
 #include "rate_limit_sender_t.hpp"
 #include "rate_limit_sniffer_t.hpp"
 #include "rate_limit_analyzer_t.hpp"
-#include "probe_t.hpp"
-
+#include "probe_infos_t.hpp"
 class rate_limit_test_t{
 public:
 
@@ -30,7 +29,7 @@ public:
     rate_limit_test_t(int nb_probes,
                       int probing_rate,
                       const Tins::NetworkInterface & iface,
-                      const std::vector<Tins::IP> & candidates);
+                      const std::vector<probe_infos_t> & candidates);
 
 
     /**
@@ -46,7 +45,7 @@ public:
     rate_limit_test_t(int nb_probes,
                       int probing_rate,
                       const Tins::NetworkInterface & iface,
-                      const std::unordered_map<Tins::IPv4Address, Tins::IP> & candidates);
+                      const std::unordered_map<Tins::IPv4Address, probe_infos_t> & candidates);
 
 
     rate_limit_test_t(const rate_limit_sender_t & , const rate_limit_sniffer_t & , const rate_limit_analyzer_t &);

@@ -31,11 +31,6 @@ using namespace utils;
 
 using namespace boost::filesystem;
 namespace {
-    std::string build_pcap_name(std::string folder, std::string icmp_type, std::string destination, int rate){
-        std::stringstream pcap_file_stream;
-        pcap_file_stream << folder << icmp_type << "_" << destination << "_" << rate << ".pcap";
-        return pcap_file_stream.str();
-    }
 
     uint8_t  test_ttl = 7;
 
@@ -179,7 +174,6 @@ int main(int argc, char ** argv) {
 
     std::string input_dir {"resources/1/"};
 //    std::string output_dir {"resources/2/"};
-    std::string output_dir {"resources/multiple/"};
 
     if (is_addresses_from_file){
         path address_dir(input_dir);
@@ -204,7 +198,7 @@ int main(int argc, char ** argv) {
             // Third destination unreachable file
             IP dest_unreachable_probe = find_probe_from_file(address_dir.string(), ip_address_str, "icmp_unreachable", 2);
 
-            test_addresses.push_back({ttl_exceeded_probe, dest_unreachable_probe, echo_reply_probe});
+            test_addresses.emplace_back(ttl_exceeded_probe, dest_unreachable_probe, echo_reply_probe);
         }
     }
 
@@ -213,6 +207,8 @@ int main(int argc, char ** argv) {
     if (is_multiple_addresses_from_file){
         path address_dir("resources/routers/");
 
+        path pcap_router("resources/multiple");
+
         // Parse the .router files, one triplet by router.
         for (directory_iterator itr(address_dir); itr!=directory_iterator(); ++itr){
             alias_test_t alias_test;
@@ -220,11 +216,30 @@ int main(int argc, char ** argv) {
             std::string file_name {itr->path().string()};
 
             // Debug hack
-            if (file_name != std::string("resources/routers/38.46.191.67_0.router")){
+//            if (file_name != std::string("resources/routers/38.46.191.67_0.router")){
+//                continue;
+//            }
+
+            alias_test = build_icmp_trigger_probes_from_file(file_name, sniff_interface.ipv4_address());
+
+            // NOT DUPLICATE EXPERIMENT.
+            auto file_exists = std::find_if(directory_iterator(pcap_router), directory_iterator(), [&alias_test](const auto & file){
+                // Check that we have completed all the experiments for this alias set
+                auto file_name = file.path().string();
+                auto test_address = alias_test[0].test_address();
+//                if (file_name.find(test_address) != std::string::npos){
+//                    if (file_name.find("8192") != std::string::npos){
+//                        if (file_name.find("icmp_ttl_exceeded") != std::string::npos){
+//                            return true;
+//                        }
+//                    }
+//                }
+                return file_name.find(test_address) != std::string::npos && file_name.find("8192") != std::string::npos && file_name.find("icmp_ttl_exceeded") != std::string::npos;
+            });
+
+            if (file_exists != directory_iterator()){
                 continue;
             }
-
-            alias_test = extract_icmp_trigger_probes_from_file(file_name, sniff_interface.ipv4_address());
 
             // Hack here to just keep the 2 first and the witness
             alias_test_t test_2_and_witness (alias_test.begin(), alias_test.begin()+2);
@@ -266,7 +281,7 @@ int main(int argc, char ** argv) {
                                                                  icmp_triggering_triplet.get_icmp_ttl_exceeded()));
         }
 
-        for(int i = 10; pow(2, i) < max_probing_rate; ++i){
+        for(int i = 1; pow(2, i) < max_probing_rate; ++i){
             // Probing rate represents the number of packets to send in 1 sec
             auto probing_rate = static_cast<int>(pow(2, i));
             auto nb_probes = 5 * probing_rate;
@@ -308,3 +323,6 @@ int main(int argc, char ** argv) {
 
     return 0;
 }
+
+
+

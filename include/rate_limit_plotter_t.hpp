@@ -20,9 +20,6 @@ public:
     using probing_rates_t = std::vector<int>;
     using loss_rates_t = std::vector<double>;
 
-
-    using responsive_info_probe_t = std::pair<bool, Tins::Packet>;
-
     struct plot_infos_t{
         std::string title;
     };
@@ -33,6 +30,8 @@ public:
      * @param rates
      */
     void plot_loss_rate_gilbert_eliott(const std::vector<double> &losses, const std::vector<int> &rates, const std::vector<gilbert_elliot_t> & burst_models);
+
+    std::stringstream dump_loss_rate(const std::unordered_map<Tins::IPv4Address, std::unordered_map<int, double>> &);
 
     /**
      * This function plots on Y axis the different transitions probabilities and on X axis the corresponding
@@ -46,10 +45,10 @@ public:
      * Plot the raw data of an interface
      * @param packets
      */
-    void plot_raw(const std::vector<responsive_info_probe_t> & packets);
+    void plot_raw(const std::vector<utils::responsive_info_probe_t> & packets);
 
 
-    void plot_bitmap_raw(const std::unordered_map<Tins::IPv4Address, std::vector<responsive_info_probe_t>> & raw_data, const std::string & title);
+    void plot_bitmap_raw(const std::unordered_map<Tins::IPv4Address, std::vector<utils::responsive_info_probe_t>> & raw_data, const std::string & title);
     template<typename Sort>
     void plot_aggregate(const std::unordered_map<Tins::IPv4Address, utils::stats_t> & stats_by_ip, const plot_infos_t & plot_infos,  Sort sort){
         // First sort the data by Sort. X axis will be the IP, Y the values
@@ -96,10 +95,10 @@ public:
      * @param raw_data
      * @param title
      */
-    void plot_bitmap_ip(const std::pair<Tins::IPv4Address, std::unordered_map<int, std::vector<responsive_info_probe_t>>> & raw_data, const std::string & title);
+    void plot_bitmap_ip(const std::pair<Tins::IPv4Address, std::unordered_map<int, std::vector<utils::responsive_info_probe_t>>> & raw_data, const std::string & title);
 
-    void plot_bitmap_router_rate(const std::unordered_map<Tins::IPv4Address, std::vector<responsive_info_probe_t>> & candidates,
-                                 const std::unordered_map<Tins::IPv4Address, std::vector<responsive_info_probe_t>> & witness,
+    void plot_bitmap_router_rate(const std::unordered_map<Tins::IPv4Address, std::vector<utils::responsive_info_probe_t>> & candidates,
+                                 const std::unordered_map<Tins::IPv4Address, std::vector<utils::responsive_info_probe_t>> & witness,
                                  const std::string & title);
 
     /**
@@ -111,13 +110,49 @@ public:
      * @param title
      */
     void plot_bitmap_router(
-            const std::unordered_map<Tins::IPv4Address, std::unordered_map<int, std::vector<rate_limit_plotter_t::responsive_info_probe_t>>> &candidates,
-            const std::unordered_map<Tins::IPv4Address, std::unordered_map<int, std::vector<rate_limit_plotter_t::responsive_info_probe_t>>> &witnesses,
+            const std::unordered_map<Tins::IPv4Address, std::unordered_map<int, std::vector<utils::responsive_info_probe_t>>> &candidates,
+            const std::unordered_map<Tins::IPv4Address, std::unordered_map<int, std::vector<utils::responsive_info_probe_t>>> &witnesses,
             const std::string & title);
+
+
+
+
+    /**
+     *
+     * @param candidates
+     * @param witnesses
+     * @param title
+     * @return
+     */
+    using correlation_matrix_t = std::vector<std::vector<double>>;
+
+    std::vector<std::pair<int, correlation_matrix_t>> compute_correlation_matrix(const std::unordered_map<Tins::IPv4Address, std::unordered_map<int, std::vector<utils::responsive_info_probe_t>>> &candidates,
+                          const std::unordered_map<Tins::IPv4Address, std::unordered_map<int, std::vector<utils::responsive_info_probe_t>>> &witnesses,
+                          const std::string & title);
+
+    void plot_correlation_matrix(const std::unordered_map<Tins::IPv4Address, std::unordered_map<int, std::vector<utils::responsive_info_probe_t>>> &candidates,
+                                                                                 const std::unordered_map<Tins::IPv4Address, std::unordered_map<int, std::vector<utils::responsive_info_probe_t>>> &witnesses,
+                                                                                 const std::string & title);
+
+
     private:
-    void plot_bitmap_internal(const std::vector<std::vector<rate_limit_plotter_t::responsive_info_probe_t>> &raw_data,
+    void plot_bitmap_internal(const std::vector<std::vector<utils::responsive_info_probe_t>> &raw_data,
                                                const std::string &title);
-    void plot_bitmap_internal(const std::vector<std::pair<RGBApixel, std::vector<responsive_info_probe_t>>> & raw_data, const std::string & title);
+    void plot_bitmap_internal(const std::vector<std::pair<RGBApixel, std::vector<utils::responsive_info_probe_t>>> & raw_data, const std::string & title);
+
+
+
+    std::string dump_correlation_matrix(const std::vector<std::vector<double>> & matrix, int digit_number);
+
+    double correlation(const std::vector<utils::responsive_info_probe_t> & raw_router_1,
+                       const std::vector<utils::responsive_info_probe_t> & raw_router_2);
+
+
+    correlation_matrix_t
+    compute_correlation_matrix(size_t random_variables_n, std::size_t last_index_candidate, int rate,
+                               const std::vector<Tins::IPv4Address> &all_ips,
+                               const std::unordered_map<Tins::IPv4Address, std::unordered_map<int, std::vector<utils::responsive_info_probe_t>>> &candidates,
+                               const std::unordered_map<Tins::IPv4Address, std::unordered_map<int, std::vector<utils::responsive_info_probe_t>>> &witnesses);
 };
 
 
