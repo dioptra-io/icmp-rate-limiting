@@ -21,6 +21,9 @@
 using namespace Tins;
 using namespace utils;
 namespace {
+
+    std::vector<int> custom_rates {1000, 2000, 3000};
+
     // The format of the input file should be the following:
     // GROUP_ID, ADDRESS_FAMILY, PROBING_TYPE (DIRECT, INDIRECT), PROTOCOL (tcp, udp, icmp), INTERFACE_TYPE (CANDIDATE, WITNESS),
     // REAL_ADDRESS, PROBING_ADDRESS, FLOW_ID (v6), SRC_PORT(v4) , DST_PORT(v4).
@@ -103,14 +106,15 @@ namespace {
             }
 
 
-            // Set the real address
-            IPv4Address real_address {tokens[real_address_index]};
 
-            // Set the probing address
-            IPv4Address probing_address {tokens[probing_address_index]};
             IP probe;
             IPv6 probe6;
             if (address_family == std::string("4")){
+                // Set the real address
+                IPv4Address real_address {tokens[real_address_index]};
+
+                // Set the probing address
+                IPv4Address probing_address {tokens[probing_address_index]};
                 probe.dst_addr(probing_address);
                 probe.src_addr(NetworkInterface::default_interface().ipv4_address());
                 if (probing_style == probing_style_t::DIRECT) {
@@ -143,7 +147,27 @@ namespace {
                 probes_infos.emplace_back(group_id, 1, probe, real_address, protocol,  probing_style, interface_type);
 
             } else if (address_family == std::string("6")){
+                // Set the real address
+                IPv6Address real_address {tokens[real_address_index]};
+
+                // Set the probing address
+                IPv6Address probing_address {tokens[probing_address_index]};
                 //TODO
+                probe6.dst_addr(probing_address);
+                probe6.src_addr(NetworkInterface::default_interface().ipv6_addresses()[0].address);
+                if (probing_style == probing_style_t::DIRECT) {
+                    if (protocol == PDU::PDUType::ICMP) {
+                        probe6 /= ICMPv6();
+                    } else if (protocol == PDU::PDUType::UDP) {
+                        probe6 /= UDP(default_dport, default_sport);
+
+                    } else if (protocol == PDU::PDUType::TCP) {
+                        probe6 /= TCP(default_dport, default_sport);
+                    }
+                    probe6.hop_limit(64);
+                }
+                // Same rate by default
+                probes_infos.emplace_back(group_id, 1, probe6, real_address, protocol,  probing_style, interface_type);
             }
             // Probing rate is by default the same for all the interfaces
 
@@ -151,7 +175,43 @@ namespace {
         return probes_infos;
     }
 
-    std::unordered_map<IPv4Address, std::unordered_map<int, packet_interval_t>> execute_individual_probes(int max_probing_rate, const std::string & output_dir_individual, const std::vector<probe_infos_t> & probes_infos){
+    struct pairhash {
+    public:
+        template <typename T, typename U>
+        std::size_t operator()(const std::pair<T, U> &x) const
+        {
+            return std::hash<T>()(x.first) ^ std::hash<U>()(x.second);
+        }
+    };
+
+    template <typename Address>
+    std::stringstream build_output_line(const Address & address,
+                                        const std::string & type,
+                                        int probing_rate, double loss_rate,
+                                        const std::unordered_map<Address, double> correlations){
+
+        std::stringstream ostream;
+        ostream << address << ", " << type << ", " << probing_rate << ", " << loss_rate;
+
+        if (type == std::string("GROUPSPR")){
+            for (const auto & correlation_address : correlations){
+                ostream << ", " << correlation_address.first << ": " << correlation_address.second;
+            }
+        }
+
+        ostream << "\n";
+
+
+        return ostream;
+    }
+
+
+
+    std::unordered_map<IPv4Address, std::unordered_map<int, packet_interval_t>> execute_individual_probes4(
+            int max_probing_rate,
+            const std::string &output_dir_individual,
+            const std::vector<probe_infos_t> &probes_infos,
+            std::stringstream & ostream){
         auto sniff_interface = NetworkInterface::default_interface();
 
         /**
@@ -170,20 +230,21 @@ namespace {
 
         // Progressively increase the sending rate (log scale)
         for (const auto & probe_infos : probes_infos){
-            pcap_individual_file.insert(std::make_pair(probe_infos.get_real_target(), std::unordered_map<int, std::string>()));
-            triggering_rates.insert(std::make_pair(probe_infos.get_real_target(), std::unordered_map<int, packet_interval_t>()));
+            pcap_individual_file.insert(std::make_pair(probe_infos.get_real_target4(), std::unordered_map<int, std::string>()));
+            triggering_rates.insert(std::make_pair(probe_infos.get_real_target4(), std::unordered_map<int, packet_interval_t>()));
             bool has_found_triggering_rate = false;
-            for(int i = 10; std::pow(2, i) < max_probing_rate; ++i){
+//            for(int i = 10; std::pow(2, i) < max_probing_rate; ++i){
+            for(const auto & probing_rate : custom_rates){
                 // Probing rate represents the number of packets to send in 1 sec
-                auto probing_rate = static_cast<int>(pow(2, i));
+//                auto probing_rate = static_cast<int>(pow(2, i));
                 auto nb_probes = 5 * probing_rate;
 
-                rate_limit_test_t rate_limit_test(nb_probes, probing_rate, sniff_interface,
+                rate_limit_test_t<IPv4Address> rate_limit_test(nb_probes, probing_rate, sniff_interface,
                                                   std::vector<probe_infos_t>(1, probe_infos));
 
                 auto icmp_type = probe_infos.icmp_type_str();
 
-                auto real_target = probe_infos.get_real_target();
+                auto real_target = probe_infos.get_real_target4();
                 auto pcap_file_name = build_pcap_name(output_dir_individual, icmp_type, real_target.to_string(), probing_rate);
                 pcap_individual_file[real_target][probing_rate] =  pcap_file_name;
                 rate_limit_test.set_pcap_file(pcap_file_name);
@@ -195,16 +256,23 @@ namespace {
                 *  Determine the rate where the responding behaviour changes for each interface (Technique: compute loss rates on intervals)
                 */
                 std::unordered_map<IPv4Address, IP> matchers;
-                matchers.insert(std::make_pair(probe_infos.get_real_target(), probe_infos.get_packet()));
+                matchers.insert(std::make_pair(probe_infos.get_real_target4(), probe_infos.get_packet4()));
                 rate_limit_analyzer_t rate_limit_analyzer(probe_infos.get_probing_style(), matchers) ;
 
                 // Start the analysis of responsiveness.
-                rate_limit_analyzer.start(pcap_individual_file.at(probe_infos.get_real_target()).at(probing_rate));
+                rate_limit_analyzer.start(pcap_individual_file.at(probe_infos.get_real_target4()).at(probing_rate));
 
+                // Extract loss rate.
+                auto loss_rate = rate_limit_analyzer.compute_loss_rate(probe_infos.get_real_target4());
+                std::cout << "Loss rate: " << loss_rate << "\n";
                 // Now extract relevant infos.
-                auto triggering_rates_per_ip = rate_limit_analyzer.compute_icmp_triggering_rate();
+                auto triggering_rates_per_ip = rate_limit_analyzer.compute_icmp_triggering_rate4();
                 if (triggering_rates_per_ip.at(real_target) != std::make_pair(-1, -1)) {
                     triggering_rates[real_target][probing_rate] = triggering_rates_per_ip[real_target];
+
+                    auto line_ostream = build_output_line(probe_infos.get_real_target4(), "INDIVIDUAL", probing_rate, loss_rate,
+                                                          std::unordered_map<IPv4Address, double>());
+                    ostream << line_ostream.str();
                     if (has_found_triggering_rate) {
                         break;
                     }
@@ -226,10 +294,102 @@ namespace {
     }
 
 
+    std::unordered_map<IPv6Address, std::unordered_map<int, packet_interval_t>> execute_individual_probes6(
+            int max_probing_rate,
+            const std::string &output_dir_individual,
+            const std::vector<probe_infos_t> &probes_infos, std::stringstream & ostream){
+        auto sniff_interface = NetworkInterface::default_interface();
 
-    void execute_group_probes(int max_probing_rate, const std::string & output_dir_groups,
-                              const std::unordered_map<IPv4Address, std::unordered_map<int, packet_interval_t>> & triggering_rates,
-                              const std::vector<probe_infos_t> & probes_infos) {
+        /**
+        * Initialize data structures.
+        */
+
+        // Individual
+
+        std::unordered_map<IPv6Address, std::unordered_map<int, std::string>> pcap_individual_file;
+        std::unordered_map<IPv6Address, std::unordered_map<int, packet_interval_t>> triggering_rates;
+
+        /**
+     *  Probe each interface separately with progressive rates.
+     */
+        std::cout << "Proceeding to the individual probing phase...\n";
+
+
+        for (const auto & probe_infos : probes_infos){
+
+
+            pcap_individual_file.insert(std::make_pair(probe_infos.get_real_target6(), std::unordered_map<int, std::string>()));
+            triggering_rates.insert(std::make_pair(probe_infos.get_real_target6(), std::unordered_map<int, packet_interval_t>()));
+            bool has_found_triggering_rate = false;
+            // Progressively increase the sending rate (log scale)
+//            for(int i = 10; std::pow(2, i) < max_probing_rate; ++i){
+            for(const auto & probing_rate : custom_rates){
+
+                // Probing rate represents the number of packets to send in 1 sec
+                auto nb_probes = 5 * probing_rate;
+
+                rate_limit_test_t<IPv6Address> rate_limit_test(nb_probes, probing_rate, sniff_interface,
+                                                               std::vector<probe_infos_t>(1, probe_infos));
+
+                auto icmp_type = probe_infos.icmp_type_str();
+
+                auto real_target = probe_infos.get_real_target6();
+                auto pcap_file_name = build_pcap_name(output_dir_individual, icmp_type, real_target.to_string(), probing_rate);
+                pcap_individual_file[real_target][probing_rate] =  pcap_file_name;
+                rate_limit_test.set_pcap_file(pcap_file_name);
+
+                std::cout << "Starting " << icmp_type <<  " for " << real_target.to_string() << " with probing rate " << probing_rate <<  "...\n";
+                rate_limit_test.start();
+
+                /**
+                *  Determine the rate where the responding behaviour changes for each interface (Technique: compute loss rates on intervals)
+                */
+                std::unordered_map<IPv6Address, IPv6> matchers;
+                matchers.insert(std::make_pair(probe_infos.get_real_target6(), probe_infos.get_packet6()));
+                rate_limit_analyzer_t rate_limit_analyzer(probe_infos.get_probing_style(), matchers) ;
+
+                // Start the analysis of responsiveness.
+                rate_limit_analyzer.start(pcap_individual_file.at(probe_infos.get_real_target6()).at(probing_rate));
+
+                // Extract loss rate.
+                auto loss_rate = rate_limit_analyzer.compute_loss_rate(probe_infos.get_real_target6());
+                std::cout << "Loss rate: " << loss_rate << "\n";
+                // Now extract relevant infos.
+                auto triggering_rates_per_ip = rate_limit_analyzer.compute_icmp_triggering_rate6();
+                if (triggering_rates_per_ip.at(real_target) != std::make_pair(-1, -1)) {
+                    triggering_rates[real_target][probing_rate] = triggering_rates_per_ip[real_target];
+
+                    auto line_ostream = build_output_line(probe_infos.get_real_target6(), "INDIVIDUAL", probing_rate, loss_rate,
+                                                          std::unordered_map<IPv6Address, double>());
+
+                    ostream << line_ostream.str();
+                    if (has_found_triggering_rate) {
+                        break;
+                    }
+                    has_found_triggering_rate = true;
+                }
+
+                std::this_thread::sleep_for(std::chrono::seconds(5));
+            }
+
+        }
+
+
+        for (const auto & triggering_rate : triggering_rates) {
+            for (const auto & rate_triggering_rate : triggering_rate.second){
+                std::cout << "Rate: " << rate_triggering_rate.first << "\n";
+                std::cout << triggering_rate.first << ": (" << rate_triggering_rate.second.first << ", " << rate_triggering_rate.second.second << ")\n";
+            }
+        }
+        return triggering_rates;
+    }
+
+
+    void execute_group_probes4(int max_probing_rate, const std::string & output_dir_groups,
+                               const std::unordered_map<IPv4Address, std::unordered_map<int, packet_interval_t>> & triggering_rates,
+                               const std::vector<probe_infos_t> & probes_infos,
+                               const std::string & group_type,
+                               std::stringstream & ostream) {
 
         auto sniff_interface = NetworkInterface::default_interface();
 
@@ -259,32 +419,6 @@ namespace {
             groups[group_id].push_back(probe_info);
         });
 
-        /**
-         * Find witness interfaces
-         */
-        // Traceroute with the good protocol to find a witness
-        std::cout << "Finding witness interfaces with paris traceroute\n";
-        for (auto &group : groups) {
-            auto probe_infos = group.second[0];
-
-            probing_style_t probing_style = probe_infos.get_probing_style();
-            auto protocol = probe_infos.get_protocol();
-            if (probing_style == probing_style_t::DIRECT) {
-                auto real_target = probe_infos.get_real_target();
-                if (protocol == PDU::PDUType::ICMP) {
-
-                    // Traceroute to the real target
-
-
-                } else {
-                    // TODO
-                }
-            } else {
-                // TODO
-            }
-
-        }
-
 
         // Probe groups
         for (const auto &group : groups) {
@@ -301,7 +435,7 @@ namespace {
             probing_style_t probing_style = group.second[0].get_probing_style();
             for (const auto &probe_info : group.second) {
                 // Find the min triggering rates from the data structures.
-                auto real_target = probe_info.get_real_target();
+                auto real_target = probe_info.get_real_target4();
                 auto intervals_target = triggering_rates.at(real_target);
                 for (const auto &rates : intervals_target) {
                     if (rates.second != std::make_pair(-1, -1)) {
@@ -318,21 +452,25 @@ namespace {
                 ratios_rates.insert(probe_info.get_probing_rate());
 
                 // Prepare the analysis
-                matchers.insert(std::make_pair(probe_info.get_real_target(), probe_info.get_packet()));
+                matchers.insert(std::make_pair(probe_info.get_real_target4(), probe_info.get_packet4()));
 
 
             }
-            // Multiply the probing rate to get the minimum probing rate to trigger.
-            min_probing_rate_group *= group.second.size();
-            for (int probing_rate = min_probing_rate_group;
-                 probing_rate <=
-                 std::min(max_probing_rate, static_cast<int>(max_probing_rate_group * group.second.size()));
-                 probing_rate *= 2) {
+            for (auto probing_rate : custom_rates) {
+                if (probing_rate < min_probing_rate_group  or probing_rate > max_probing_rate_group){
+                    continue;
+                }
+
+                // Multiply the probing rate to get the minimum probing rate to trigger.
+                probing_rate *= group.second.size();
+                if (probing_rate > max_probing_rate){
+                    continue;
+                }
 
                 auto nb_probes = 5 * probing_rate;
 
 
-                rate_limit_test_t rate_limit_test(nb_probes, probing_rate, sniff_interface, group.second);
+                rate_limit_test_t<IPv4Address> rate_limit_test(nb_probes, probing_rate, sniff_interface, group.second);
 
                 auto pcap_file_name = build_pcap_name(output_dir_groups, icmp_type, to_file_name(group.second, '_'),
                                                       probing_rate);
@@ -351,19 +489,21 @@ namespace {
 
                 // Now extract relevant infos.
                 for (const auto &probe_info : group.second) {
-                    loss_rates[probe_info.get_real_target()][probing_rate] = rate_limit_analyzer.compute_loss_rate(probe_info.get_real_target());
+                    auto loss_rate = rate_limit_analyzer.compute_loss_rate(probe_info.get_real_target4());
+                    std::cout << probe_info.get_real_target4() << " loss rate: " << loss_rate << "\n";
+                    loss_rates[probe_info.get_real_target4()][probing_rate] = loss_rate;
                 }
 
                 // Triggering rate
-                auto triggering_rates_per_ip = rate_limit_analyzer.compute_icmp_triggering_rate();
+                auto triggering_rates_per_ip = rate_limit_analyzer.compute_icmp_triggering_rate4();
 
                 for (const auto &probe_info : group.second) {
-                    auto real_target = probe_info.get_real_target();
+                    auto real_target = probe_info.get_real_target4();
                     if (triggering_rates_per_ip.at(real_target) != std::make_pair(-1, -1)) {
                         triggering_rates_groups[real_target][probing_rate] = triggering_rates_per_ip[real_target];
                     }
                     // Raw data
-                    auto raw = rate_limit_analyzer.get_raw_packets(real_target);
+                    auto raw = rate_limit_analyzer.get_raw_packets4(real_target);
                     if (probe_info.get_interface_type() == interface_type_t::CANDIDATE) {
                         raw_responsiveness_candidates[real_target][probing_rate] = raw;
                     } else if (probe_info.get_interface_type() == interface_type_t::WITNESS) {
@@ -374,39 +514,334 @@ namespace {
                 std::this_thread::sleep_for(std::chrono::seconds(5));
             }
 
-            // Deduction phase
+            if (group_type == "GROUPSPR") {
+                rate_limit_plotter_t<IPv4Address> plotter;
 
-            for (const auto &triggering_rate : triggering_rates_groups) {
-                for (const auto &rate_triggering_rate : triggering_rate.second) {
-                    std::cout << "Rate: " << rate_triggering_rate.first << "\n";
-                    std::cout << triggering_rate.first << ": (" << rate_triggering_rate.second.first << ", "
-                              << rate_triggering_rate.second.second << ")\n";
+                std::unordered_map<std::pair<IPv4Address, IPv4Address>, std::unordered_map<int, double>, pairhash> correlations;
+                auto raw_responsiveness_candidates_witness = extend(raw_responsiveness_candidates, raw_responsiveness_witnesses);
+                for (const auto & raw_responsiveness1 : raw_responsiveness_candidates_witness){
+                    auto address1 = raw_responsiveness1.first;
+                    auto rates_raw1 = raw_responsiveness1.second;
+                    for (const auto & rate_raw1 : rates_raw1){
+                        auto rate1 = rate_raw1.first;
+                        auto raw1 = rate_raw1.second;
+                        for (const auto & raw_responsiveness2 : raw_responsiveness_candidates_witness){
+                            auto address2 = raw_responsiveness2.first;
+                            auto rates_raw2 = raw_responsiveness2.second;
+                            if (address1 == address2){
+                                continue;
+                            }
+                            for (const auto & rate_raw2 : rates_raw2){
+                                auto rate2 = rate_raw2.first;
+                                auto raw2 = rate_raw2.second;
+                                if (rate1 == rate2){
+                                    auto has_key = correlations.find(std::make_pair(address1, address2));
+                                    if (has_key != correlations.end()){
+                                        if (has_key->second.find(rate1) != has_key->second.end())
+                                            continue;
+                                    }
+                                    auto correlation = plotter.correlation(raw1, raw2);
+                                    correlations[std::make_pair(address1, address2)][rate1] = correlation;
+                                    correlations[std::make_pair(address2, address1)][rate1] = correlation;
+                                }
+                            }
+                        }
+
+                    }
+
+
+                }
+                for (const auto &probe_info : group.second) {
+                    auto real_target4 = probe_info.get_real_target4();
+                    for (auto probing_rate : custom_rates) {
+                        if (probing_rate < min_probing_rate_group  or probing_rate > max_probing_rate_group){
+                            continue;
+                        }
+
+                        // Multiply the probing rate to get the minimum probing rate to trigger.
+                        probing_rate *= group.second.size();
+                        if (probing_rate > max_probing_rate){
+                            continue;
+                        }
+
+                        // Extract the relevant correlations
+                        std::unordered_map<IPv4Address, double> correlations_map;
+
+                        for (const auto & correlation : correlations){
+                            auto address1 = correlation.first.first;
+                            auto address2 = correlation.first.second;
+
+                            auto correlation_rates_1_2 = correlation.second;
+                            if (address1 == real_target4) {
+                                for (const auto & correlation_rate_1_2 : correlation_rates_1_2){
+                                    auto correlation_rate = correlation_rate_1_2.first;
+                                    auto correlation_1_2 = correlation_rate_1_2.second;
+                                    if (probing_rate == correlation_rate){
+                                        correlations_map[address2] = correlation_1_2;
+                                    }
+                                }
+                            }
+                        }
+                        auto line_stream = build_output_line(real_target4, "GROUPSPR",
+                                                             probing_rate, loss_rates[real_target4][probing_rate],
+                                                             correlations_map
+                        );
+                        ostream << line_stream.str();
+                    }
+                }
+            } else {
+                for (const auto &probe_info : group.second) {
+
+                    auto real_target4 = probe_info.get_real_target4();
+                    for (auto probing_rate : custom_rates) {
+                        if (probing_rate < min_probing_rate_group  or probing_rate > max_probing_rate_group){
+                            continue;
+                        }
+
+                        // Multiply the probing rate to get the minimum probing rate to trigger.
+                        probing_rate *= group.second.size();
+                        if (probing_rate > max_probing_rate){
+                            continue;
+                        }
+                        auto line_stream = build_output_line(real_target4, "GROUPDPR",
+                                                             probing_rate, loss_rates[real_target4][probing_rate],
+                                                             std::unordered_map<IPv4Address, double>());
+                        ostream << line_stream.str();
+                    }
                 }
             }
-
-            rate_limit_plotter_t plotter;
-            plotter.plot_correlation_matrix(raw_responsiveness_candidates,
-                                            raw_responsiveness_witnesses,
-                                            "plots/test/" + to_file_name(group.second, '_') + ".correlation");
-
-            std::stringstream output_file;
-            output_file << "plots/test/" << to_file_name(group.second, '_') << "_" << group.second[0].icmp_type_str();
-            if (ratios_rates.size() == 1){
-                output_file << "sr";
-            } else if (ratios_rates.size() > 1){
-                output_file << "dr";
-            }
-            output_file << ".bmp";
-
-
-            plotter.plot_bitmap_router(raw_responsiveness_candidates, raw_responsiveness_witnesses, output_file.str());
-            auto loss_rate_stream = plotter.dump_loss_rate(loss_rates);
-            std::cout << loss_rate_stream.str() << "\n";
 
         }
     }
 
+    void execute_group_probes6(int max_probing_rate, const std::string & output_dir_groups,
+                              const std::unordered_map<IPv6Address, std::unordered_map<int, packet_interval_t>> & triggering_rates,
+                              const std::vector<probe_infos_t> & probes_infos,
+                              const std::string & group_type,
+                              std::stringstream & ostream) {
 
+        auto sniff_interface = NetworkInterface::default_interface();
+
+        /**
+         * - Build groups
+         * - Probe groups of interfaces with rates that can trigger RL.
+         * - Determine the rate where the responding behaviour changes.
+         */
+
+        /**
+         * Initialize data structures
+         */
+
+        std::unordered_map<int, std::unordered_map<int, std::string>> pcap_groups_files;
+        std::unordered_map<IPv6Address, std::unordered_map<int, packet_interval_t >> triggering_rates_groups;
+
+        // Build groups
+        std::cout << "Building groups\n";
+
+        std::unordered_map<int, std::vector<probe_infos_t> > groups;
+        std::for_each(probes_infos.begin(), probes_infos.end(), [&groups](const probe_infos_t &probe_info) {
+            auto group_id = probe_info.get_group_id();
+            auto has_key = groups.find(group_id);
+            if (has_key == groups.end()) {
+                groups[group_id] = std::vector<probe_infos_t>();
+            }
+            groups[group_id].push_back(probe_info);
+        });
+
+
+        // Probe groups
+        for (const auto &group : groups) {
+            std::unordered_map<IPv6Address, std::unordered_map<int, double>> loss_rates;
+            std::unordered_map<IPv6Address, std::unordered_map<int, std::vector<responsive_info_probe_t>>> raw_responsiveness_candidates;
+            std::unordered_map<IPv6Address, std::unordered_map<int, std::vector<responsive_info_probe_t>>> raw_responsiveness_witnesses;
+
+            //TODO Optimize the groups by changing those who have a non coherent (to determine) triggering rate.
+            auto min_probing_rate_group = 0;
+            auto max_probing_rate_group = 0;
+            auto icmp_type = group.second[0].icmp_type_str();
+            std::unordered_map<IPv6Address, IPv6> matchers;
+            std::unordered_set<int> ratios_rates;
+            probing_style_t probing_style = group.second[0].get_probing_style();
+            for (const auto &probe_info : group.second) {
+                // Find the min triggering rates from the data structures.
+                auto real_target = probe_info.get_real_target6();
+                auto intervals_target = triggering_rates.at(real_target);
+                for (const auto &rates : intervals_target) {
+                    if (rates.second != std::make_pair(-1, -1)) {
+                        if (rates.first < min_probing_rate_group or min_probing_rate_group == 0) {
+                            min_probing_rate_group = rates.first;
+                        }
+                        if (rates.first > max_probing_rate_group) {
+                            max_probing_rate_group = rates.first;
+                        }
+                    }
+                }
+
+                // Check if they all have the same rate
+                ratios_rates.insert(probe_info.get_probing_rate());
+
+                // Prepare the analysis
+                matchers.insert(std::make_pair(probe_info.get_real_target6(), probe_info.get_packet6()));
+
+
+            }
+            for (auto probing_rate : custom_rates) {
+                if (probing_rate < min_probing_rate_group  or probing_rate > max_probing_rate_group){
+                    continue;
+                }
+
+                // Multiply the probing rate to get the minimum probing rate to trigger.
+                probing_rate *= group.second.size();
+                if (probing_rate > max_probing_rate){
+                    continue;
+                }
+
+                auto nb_probes = 5 * probing_rate;
+
+
+                rate_limit_test_t<IPv6Address> rate_limit_test(nb_probes, probing_rate, sniff_interface, group.second);
+
+                auto pcap_file_name = build_pcap_name(output_dir_groups, icmp_type, to_file_name(group.second, '_'),
+                                                      probing_rate);
+                pcap_groups_files[group.first][probing_rate] = pcap_file_name;
+                rate_limit_test.set_pcap_file(pcap_file_name);
+
+                std::cout << "Starting " << icmp_type << " for " << pcap_file_name << " with probing rate "
+                          << probing_rate << "...\n";
+                rate_limit_test.start();
+
+                rate_limit_analyzer_t rate_limit_analyzer(probing_style, matchers);
+
+
+                // Start the analysis of responsiveness.
+                rate_limit_analyzer.start(pcap_groups_files.at(group.first).at(probing_rate));
+
+                // Now extract relevant infos.
+                for (const auto &probe_info : group.second) {
+                    auto loss_rate = rate_limit_analyzer.compute_loss_rate(probe_info.get_real_target6());
+                    std::cout << probe_info.get_real_target6() << " loss rate: " << loss_rate << "\n";
+                    loss_rates[probe_info.get_real_target6()][probing_rate] = loss_rate;
+                }
+
+                // Triggering rate
+                auto triggering_rates_per_ip = rate_limit_analyzer.compute_icmp_triggering_rate6();
+
+                for (const auto &probe_info : group.second) {
+                    auto real_target = probe_info.get_real_target6();
+                    if (triggering_rates_per_ip.at(real_target) != std::make_pair(-1, -1)) {
+                        triggering_rates_groups[real_target][probing_rate] = triggering_rates_per_ip[real_target];
+                    }
+                    // Raw data
+                    auto raw = rate_limit_analyzer.get_raw_packets6(real_target);
+                    if (probe_info.get_interface_type() == interface_type_t::CANDIDATE) {
+                        raw_responsiveness_candidates[real_target][probing_rate] = raw;
+                    } else if (probe_info.get_interface_type() == interface_type_t::WITNESS) {
+                        raw_responsiveness_witnesses[real_target][probing_rate] = raw;
+                    }
+
+                }
+                std::this_thread::sleep_for(std::chrono::seconds(5));
+            }
+
+            if (group_type == "GROUPSPR") {
+                rate_limit_plotter_t<IPv6Address> plotter;
+
+                std::unordered_map<std::pair<IPv6Address, IPv6Address>, std::unordered_map<int, double>, pairhash> correlations;
+                auto raw_responsiveness_candidates_witness = extend(raw_responsiveness_candidates, raw_responsiveness_witnesses);
+                for (const auto & raw_responsiveness1 : raw_responsiveness_candidates_witness){
+                    auto address1 = raw_responsiveness1.first;
+                    auto rates_raw1 = raw_responsiveness1.second;
+                    for (const auto & rate_raw1 : rates_raw1){
+                        auto rate1 = rate_raw1.first;
+                        auto raw1 = rate_raw1.second;
+                        for (const auto & raw_responsiveness2 : raw_responsiveness_candidates_witness){
+                            auto address2 = raw_responsiveness2.first;
+                            auto rates_raw2 = raw_responsiveness2.second;
+                            if (address1 == address2){
+                                continue;
+                            }
+                            for (const auto & rate_raw2 : rates_raw2){
+                                auto rate2 = rate_raw2.first;
+                                auto raw2 = rate_raw2.second;
+                                if (rate1 == rate2){
+                                    auto has_key = correlations.find(std::make_pair(address1, address2));
+                                    if (has_key != correlations.end()){
+                                        if (has_key->second.find(rate1) != has_key->second.end())
+                                        continue;
+                                    }
+                                    auto correlation = plotter.correlation(raw1, raw2);
+                                    correlations[std::make_pair(address1, address2)][rate1] = correlation;
+                                    correlations[std::make_pair(address2, address1)][rate1] = correlation;
+                                }
+                            }
+                        }
+
+                    }
+
+
+                }
+                for (const auto &probe_info : group.second) {
+                    auto real_target6 = probe_info.get_real_target6();
+                    for (auto probing_rate : custom_rates) {
+                        if (probing_rate < min_probing_rate_group  or probing_rate > max_probing_rate_group){
+                            continue;
+                        }
+
+                        // Multiply the probing rate to get the minimum probing rate to trigger.
+                        probing_rate *= group.second.size();
+                        if (probing_rate > max_probing_rate){
+                            continue;
+                        }
+
+                        // Extract the relevant correlations
+                        std::unordered_map<IPv6Address, double> correlations_map;
+
+                        for (const auto & correlation : correlations){
+                            auto address1 = correlation.first.first;
+                            auto address2 = correlation.first.second;
+
+                            auto correlation_rates_1_2 = correlation.second;
+                            if (address1 == real_target6) {
+                                for (const auto & correlation_rate_1_2 : correlation_rates_1_2){
+                                    auto correlation_rate = correlation_rate_1_2.first;
+                                    auto correlation_1_2 = correlation_rate_1_2.second;
+                                    if (probing_rate == correlation_rate){
+                                        correlations_map[address2] = correlation_1_2;
+                                    }
+                                }
+                            }
+                        }
+                        auto line_stream = build_output_line(real_target6, "GROUPSPR",
+                                                             probing_rate, loss_rates[real_target6][probing_rate],
+                                                             correlations_map
+                                                             );
+                        ostream << line_stream.str();
+                    }
+                }
+            } else {
+                for (const auto &probe_info : group.second) {
+
+                    auto real_target6 = probe_info.get_real_target6();
+                    for (auto probing_rate : custom_rates) {
+                        if (probing_rate < min_probing_rate_group  or probing_rate > max_probing_rate_group){
+                            continue;
+                        }
+
+                        // Multiply the probing rate to get the minimum probing rate to trigger.
+                        probing_rate *= group.second.size();
+                        if (probing_rate > max_probing_rate){
+                            continue;
+                        }
+                        auto line_stream = build_output_line(real_target6, "GROUPDPR",
+                                                             probing_rate, loss_rates[real_target6][probing_rate],
+                                                             std::unordered_map<IPv6Address, double>());
+                        ostream << line_stream.str();
+                    }
+                }
+            }
+
+        }
+    }
 
 }
 
@@ -460,28 +895,58 @@ int main(int argc, char * argv[]){
     std::vector<std::vector<probe_infos_t>> aliases;
 
 
-    // Individual probing
-    auto trigerring_rates = execute_individual_probes(max_probing_rate, output_dir_individual, probes_infos);
+    /**
+     * Initialize output stream
+     */
 
-    // Group probing same rate
-    execute_group_probes(max_probing_rate, output_dir_groups, trigerring_rates, probes_infos);
+    std::stringstream ostream;
 
-    // Group probing different rate
-    std::cout << "Proceeding to probing groups phase with same probing rate\n";
-    auto ratio_rate = 8;
-    // Change the rate of 1 candidate by ratio_rate
-    std::vector<probe_infos_t> probes_infos_different_rates (probes_infos.begin(), probes_infos.end());
-    for (auto & probe_infos: probes_infos_different_rates){
-        if (probe_infos.get_interface_type() == interface_type_t::CANDIDATE){
-            probe_infos.set_probing_rate(ratio_rate);
-            break;
+    if (probes_infos[0].get_family() == PDU::PDUType::IP){
+        // Individual probing
+        auto trigerring_rates = execute_individual_probes4(max_probing_rate, output_dir_individual, probes_infos, ostream);
+
+        // Group probing same rate
+        std::cout << "Proceeding to probing groups phase with same probing rate\n";
+        execute_group_probes4(max_probing_rate, output_dir_groups, trigerring_rates, probes_infos, "GROUPSPR", ostream);
+
+        // Group probing different rate
+        auto ratio_rate = 8;
+        // Change the rate of 1 candidate by ratio_rate
+        std::vector<probe_infos_t> probes_infos_different_rates (probes_infos.begin(), probes_infos.end());
+        for (auto & probe_infos: probes_infos_different_rates){
+            if (probe_infos.get_interface_type() == interface_type_t::CANDIDATE){
+                probe_infos.set_probing_rate(ratio_rate);
+                break;
+            }
         }
+
+        std::cout << "Proceeding to probing groups phase with different probing rate\n";
+        execute_group_probes4(max_probing_rate, output_dir_groups, trigerring_rates, probes_infos_different_rates, "GROUPDPR", ostream);
+
+    } else if (probes_infos[0].get_family() == PDU::PDUType::IPv6){
+        // Individual probing
+        auto trigerring_rates = execute_individual_probes6(max_probing_rate, output_dir_individual, probes_infos, ostream);
+
+        // Group probing same rate
+        std::cout << "Proceeding to probing groups phase with same probing rate\n";
+        execute_group_probes6(max_probing_rate, output_dir_groups, trigerring_rates, probes_infos, "GROUPSPR", ostream);
+
+        // Group probing different rate
+        auto ratio_rate = 8;
+        // Change the rate of 1 candidate by ratio_rate
+        std::vector<probe_infos_t> probes_infos_different_rates (probes_infos.begin(), probes_infos.end());
+        for (auto & probe_infos: probes_infos_different_rates){
+            if (probe_infos.get_interface_type() == interface_type_t::CANDIDATE){
+                probe_infos.set_probing_rate(ratio_rate);
+                break;
+            }
+        }
+
+        std::cout << "Proceeding to probing groups phase with different probing rate\n";
+        execute_group_probes6(max_probing_rate, output_dir_groups, trigerring_rates, probes_infos_different_rates, "GROUPDPR", ostream);
     }
 
-    std::cout << "Proceeding to probing groups phase with different probing rate\n";
-    execute_group_probes(max_probing_rate, output_dir_groups, trigerring_rates, probes_infos_different_rates);
-
-
+    std::cout << ostream.str();
     // Take a decision if they are aliases, not aliases, or not possible to decide
 
 

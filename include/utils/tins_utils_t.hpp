@@ -6,6 +6,7 @@
 #define ICMPRATELIMITING_TINS_UTILS_T_HPP
 #include <tins/tins.h>
 #include <unordered_map>
+#include <probe_infos_t.hpp>
 
 namespace utils {
     template<typename T>

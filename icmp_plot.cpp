@@ -223,7 +223,7 @@ int main (int argc, char*argv[]){
                     }
 
                     // For bmp_raw
-                    raw_data_by_ip.insert(std::make_pair(probing_rate, icmp_analyzer.get_raw_packets(test_ip)));
+                    raw_data_by_ip.insert(std::make_pair(probing_rate, icmp_analyzer.get_raw_packets4(test_ip)));
 
 
                     // For temporal evolution
@@ -232,7 +232,7 @@ int main (int argc, char*argv[]){
                     bursts_probabilities[i-start_power_of_2] = burst_model_ip;
 
                     if (show_raw){
-                        auto raw_data = icmp_analyzer.get_raw_packets(test_ip);
+                        auto raw_data = icmp_analyzer.get_raw_packets4(test_ip);
 
                         icmp_analyzer.dump_time_series();
                         rate_limit_plotter_t raw_plotter;
@@ -382,7 +382,7 @@ int main (int argc, char*argv[]){
 //                            std::cout << "TRUE\n";
 //                        }
                         analyzer.start(pcap_file_str);
-                        auto triggering_rates_by_ip = analyzer.compute_icmp_triggering_rate();
+                        auto triggering_rates_by_ip = analyzer.compute_icmp_triggering_rate4();
                         for (const auto & triggering_rates : triggering_rates_by_ip){
                             std::cout << triggering_rates.first << ": (" << triggering_rates.second.first << ", " << triggering_rates.second.second << ")\n";
                         }
@@ -393,14 +393,14 @@ int main (int argc, char*argv[]){
 
                         responsiveness_ip_t responsiveness_ip_candidates;
                         for(const auto & candidate : candidates) {
-                            auto raw_packets = analyzer.get_raw_packets(candidate);
+                            auto raw_packets = analyzer.get_raw_packets4(candidate);
                             responsiveness_ip_candidates.insert(std::make_pair(candidate, raw_packets));
                             raw_routers_all_rates.at(candidate).insert(std::make_pair(rate, raw_packets));
                         }
 
                         responsiveness_ip_t responsiveness_ip_witnesses;
                         for(const auto & witness : witnesses) {
-                            auto raw_packets = analyzer.get_raw_packets(witness);
+                            auto raw_packets = analyzer.get_raw_packets4(witness);
                             responsiveness_ip_witnesses.insert(std::make_pair(witness, raw_packets));
                             raw_witnesses_all_rates.at(witness).insert(std::make_pair(rate, raw_packets));
                         }

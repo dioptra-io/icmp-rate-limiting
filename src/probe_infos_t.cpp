@@ -5,13 +5,15 @@
 #include <sstream>
 #include "../include/probe_infos_t.hpp"
 
+
 using namespace Tins;
 using namespace utils;
-probe_infos_t::probe_infos_t(int group_id, int probing_rate, const IP &packet, const IPv4Address & real_target, PDU::PDUType protocol, probing_style_t probing_style, interface_type_t interface_type) :
+probe_infos_t::probe_infos_t(int group_id, int probing_rate, const IP & packet, const IPv4Address & real_target, PDU::PDUType protocol, probing_style_t probing_style, interface_type_t interface_type) :
         m_group_id(group_id),
         m_probing_rate(probing_rate),
-        m_packet(packet),
-        m_real_target(real_target),
+        m_family(PDU::PDUType::IP),
+        m_packet4(packet),
+        m_real_target4(real_target),
         m_protocol (protocol),
         m_probing_style(probing_style),
         m_interface_type (interface_type)
@@ -19,8 +21,17 @@ probe_infos_t::probe_infos_t(int group_id, int probing_rate, const IP &packet, c
 
 }
 
-const IP &probe_infos_t::get_packet() const {
-    return m_packet;
+probe_infos_t::probe_infos_t(int group_id, int probing_rate, const IPv6 & packet, const IPv6Address & real_target, PDU::PDUType protocol, probing_style_t probing_style, interface_type_t interface_type) :
+        m_group_id(group_id),
+        m_probing_rate(probing_rate),
+        m_family(PDU::PDUType::IPv6),
+        m_packet6(packet),
+        m_real_target6(real_target),
+        m_protocol (protocol),
+        m_probing_style(probing_style),
+        m_interface_type (interface_type)
+{
+
 }
 
 probing_style_t probe_infos_t::get_probing_style() const {
@@ -29,10 +40,6 @@ probing_style_t probe_infos_t::get_probing_style() const {
 
 PDU::PDUType probe_infos_t::get_protocol() const {
     return m_protocol;
-}
-
-const IPv4Address &probe_infos_t::get_real_target() const {
-    return m_real_target;
 }
 
 int probe_infos_t::get_group_id() const {
@@ -65,6 +72,26 @@ void probe_infos_t::set_probing_rate(int probing_rate) {
     m_probing_rate = probing_rate;
 }
 
+PDU::PDUType probe_infos_t::get_family() const {
+    return m_family;
+}
+
+const IP &probe_infos_t::get_packet4() const {
+    return m_packet4;
+}
+
+const IPv6 &probe_infos_t::get_packet6() const {
+    return m_packet6;
+}
+
+const IPv4Address &probe_infos_t::get_real_target4() const {
+    return m_real_target4;
+}
+
+const IPv6Address &probe_infos_t::get_real_target6() const {
+    return m_real_target6;
+}
+
 
 std::string to_file_name (const std::vector<probe_infos_t> & alias_test, char separator){
     std::stringstream ss;
@@ -73,7 +100,12 @@ std::string to_file_name (const std::vector<probe_infos_t> & alias_test, char se
         if (i != 0){
             ss << separator;
         }
-        ss << alias_test[i].get_real_target();
+        if (alias_test[i].get_family() == PDU::PDUType::IP){
+            ss << alias_test[i].get_real_target4();
+        } else if (alias_test[i].get_family() == PDU::PDUType::IPv6){
+            ss << alias_test[i].get_real_target6();
+        }
+
     }
     return ss.str();
 }
