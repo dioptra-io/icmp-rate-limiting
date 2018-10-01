@@ -610,7 +610,13 @@ namespace {
                     }
                 }
             }
+            std::stringstream file_name;
 
+            for (const auto & probe_infos: group.second){
+                file_name << "_" << probe_infos.get_real_target4();
+            }
+            std::ofstream outfile (file_name.str());
+            outfile << ostream.str() << "\n";
         }
     }
 
@@ -839,8 +845,15 @@ namespace {
                     }
                 }
             }
+            std::stringstream file_name;
 
+            for (const auto & probe_infos: group.second){
+                file_name << "_" << probe_infos.get_real_target6();
+            }
+            std::ofstream outfile (file_name.str());
+            outfile << ostream.str() << "\n";
         }
+
     }
 
 }
@@ -947,10 +960,6 @@ int main(int argc, char * argv[]){
     }
 
     std::cout << ostream.str();
-    // Take a decision if they are aliases, not aliases, or not possible to decide
-
-
-
 
 }
 
