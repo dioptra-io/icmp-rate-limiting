@@ -15,9 +15,13 @@
 #include "container_utils_t.hpp"
 
 namespace utils{
-    std::string build_pcap_name(std::string folder, std::string icmp_type, std::string destination, int rate){
+    std::string build_pcap_name(const std::string & folder,
+                                const std::string & icmp_type,
+                                const std::string & destination,
+                                const std::string & icmp_algo_type,
+                                int rate){
         std::stringstream pcap_file_stream;
-        pcap_file_stream << folder << icmp_type << "_" << destination << "_" << rate << ".pcap";
+        pcap_file_stream << folder << icmp_type << "_" << destination << "_" << rate << "_" << icmp_algo_type << ".pcap";
         return pcap_file_stream.str();
     }
 

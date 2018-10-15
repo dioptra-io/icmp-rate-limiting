@@ -55,7 +55,7 @@ rate_limit_sender_t::rate_limit_sender_t(const rate_limit_sender_t &copy_rate_li
 //    sender.set_buffer_size(sender.get_buffer_size(SO_SNDBUF) * 256);
 }
 
-std::vector<IP> rate_limit_sender_t::build_probing_pattern4(int N) {
+std::vector<IP> rate_limit_sender_t::build_probing_pattern4() {
     std::vector<IP> probing_pattern;
     for (const auto & candidate : candidates){
         for (int i = 0; i < candidate.get_probing_rate(); ++i){
@@ -68,7 +68,7 @@ std::vector<IP> rate_limit_sender_t::build_probing_pattern4(int N) {
     return probing_pattern;
 }
 
-std::vector<IPv6> rate_limit_sender_t::build_probing_pattern6(int N) {
+std::vector<IPv6> rate_limit_sender_t::build_probing_pattern6() {
     std::vector<IPv6> probing_pattern;
     for (const auto & candidate : candidates){
         for (int i = 0; i < candidate.get_probing_rate(); ++i){
@@ -85,16 +85,13 @@ void rate_limit_sender_t::start() {
     auto interval = 1000000/probing_rate;
     int probe_sent = 0;
 
-    // Every N packets, we send a pair-packet.
-    int N = nb_probes / potential_alias_packets;
-
     auto start = std::chrono::high_resolution_clock::now();
 
 
     // v4
     if (candidates[0].get_family() == PDU::PDUType::IP){
         // Initialization of the pattern that will be sent.
-        auto probing_pattern = build_probing_pattern4(N);
+        auto probing_pattern = build_probing_pattern4();
 
         uint16_t ip_id = 1;
 
@@ -117,7 +114,7 @@ void rate_limit_sender_t::start() {
         }
         // v6
     }  else if (candidates[0].get_family() == PDU::PDUType::IPv6){
-        auto probing_pattern = build_probing_pattern6(N);
+        auto probing_pattern = build_probing_pattern6();
         uint16_t ip_id = 1;
 
         for (int i = 0; probe_sent < nb_probes; ++i, ++probe_sent, ++ip_id){

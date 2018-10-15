@@ -245,7 +245,7 @@ namespace {
                 auto icmp_type = probe_infos.icmp_type_str();
 
                 auto real_target = probe_infos.get_real_target4();
-                auto pcap_file_name = build_pcap_name(output_dir_individual, icmp_type, real_target.to_string(), probing_rate);
+                auto pcap_file_name = build_pcap_name(output_dir_individual, icmp_type, real_target.to_string(), "INDIVIDUAL", probing_rate);
                 pcap_individual_file[real_target][probing_rate] =  pcap_file_name;
                 rate_limit_test.set_pcap_file(pcap_file_name);
 
@@ -334,7 +334,7 @@ namespace {
                 auto icmp_type = probe_infos.icmp_type_str();
 
                 auto real_target = probe_infos.get_real_target6();
-                auto pcap_file_name = build_pcap_name(output_dir_individual, icmp_type, real_target.to_string(), probing_rate);
+                auto pcap_file_name = build_pcap_name(output_dir_individual, icmp_type, real_target.to_string(), "INDIVIDUAL", probing_rate);
                 pcap_individual_file[real_target][probing_rate] =  pcap_file_name;
                 rate_limit_test.set_pcap_file(pcap_file_name);
 
@@ -473,6 +473,7 @@ namespace {
                 rate_limit_test_t<IPv4Address> rate_limit_test(nb_probes, probing_rate, sniff_interface, group.second);
 
                 auto pcap_file_name = build_pcap_name(output_dir_groups, icmp_type, to_file_name(group.second, '_'),
+                                                      group_type,
                                                       probing_rate);
                 pcap_groups_files[group.first][probing_rate] = pcap_file_name;
                 rate_limit_test.set_pcap_file(pcap_file_name);
@@ -708,6 +709,7 @@ namespace {
                 rate_limit_test_t<IPv6Address> rate_limit_test(nb_probes, probing_rate, sniff_interface, group.second);
 
                 auto pcap_file_name = build_pcap_name(output_dir_groups, icmp_type, to_file_name(group.second, '_'),
+                                                      group_type,
                                                       probing_rate);
                 pcap_groups_files[group.first][probing_rate] = pcap_file_name;
                 rate_limit_test.set_pcap_file(pcap_file_name);

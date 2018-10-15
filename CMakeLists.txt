@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.0)
 project(ICMPRateLimiting)
 
-set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD 14)
 set(CMAKE_CXX_FLAGS -Werror)
 
 file(GLOB SOURCES src/*.cpp src/utils/*.cpp)
