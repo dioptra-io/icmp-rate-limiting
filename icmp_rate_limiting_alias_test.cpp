@@ -187,12 +187,18 @@ namespace {
     template <typename Address>
     std::stringstream build_output_line(const Address & address,
                                         const std::string & type,
-                                        int probing_rate, double loss_rate,
+                                        int probing_rate,
+                                        int change_behaviour_rate,
+                                        double loss_rate,
+                                        double transition_matrix_0_0,
+                                        double transition_matrix_0_1,
+                                        double transition_matrix_1_0,
+                                        double transition_matrix_1_1,
                                         const std::unordered_map<Address, double> correlations){
 
         std::stringstream ostream;
-        ostream << address << ", " << type << ", " << probing_rate << ", " << loss_rate;
-
+        ostream << address << ", " << type << ", " << probing_rate << ", " <<  change_behaviour_rate << ", " << loss_rate;
+        ostream << transition_matrix_0_0 << ", "  << transition_matrix_0_1 << ", " << transition_matrix_1_0 << ", " << transition_matrix_1_0 << ", " << transition_matrix_1_1;
         if (type == std::string("GROUPSPR")){
             for (const auto & correlation_address : correlations){
                 ostream << ", " << correlation_address.first << ": " << correlation_address.second;
@@ -267,11 +273,19 @@ namespace {
                 std::cout << "Loss rate: " << loss_rate << "\n";
                 // Now extract relevant infos.
                 auto triggering_rates_per_ip = rate_limit_analyzer.compute_icmp_triggering_rate4();
+                auto transition_matrix_per_ip = rate_limit_analyzer.compute_loss_model4(real_target);
                 if (triggering_rates_per_ip.at(real_target) != std::make_pair(-1, -1)) {
                     triggering_rates[real_target][probing_rate] = triggering_rates_per_ip[real_target];
+                    auto change_behaviour_rate = triggering_rates_per_ip[real_target].first;
 
-                    auto line_ostream = build_output_line(probe_infos.get_real_target4(), "INDIVIDUAL", probing_rate, loss_rate,
-                                                          std::unordered_map<IPv4Address, double>());
+                    auto line_ostream = build_output_line(
+                            probe_infos.get_real_target4(),
+                            "INDIVIDUAL",
+                            probing_rate,
+                            change_behaviour_rate,
+                            loss_rate,
+                            transition_matrix_per_ip.transition(0,0), transition_matrix_per_ip.transition(0,1), transition_matrix_per_ip.transition(1,0), transition_matrix_per_ip.transition(1,1),
+                            std::unordered_map<IPv4Address, double>());
                     ostream << line_ostream.str();
                     if (has_found_triggering_rate) {
                         break;
@@ -356,11 +370,20 @@ namespace {
                 std::cout << "Loss rate: " << loss_rate << "\n";
                 // Now extract relevant infos.
                 auto triggering_rates_per_ip = rate_limit_analyzer.compute_icmp_triggering_rate6();
+                auto transition_matrix_per_ip = rate_limit_analyzer.compute_loss_model6(real_target);
                 if (triggering_rates_per_ip.at(real_target) != std::make_pair(-1, -1)) {
                     triggering_rates[real_target][probing_rate] = triggering_rates_per_ip[real_target];
 
-                    auto line_ostream = build_output_line(probe_infos.get_real_target6(), "INDIVIDUAL", probing_rate, loss_rate,
-                                                          std::unordered_map<IPv6Address, double>());
+                    auto change_behaviour_rate = triggering_rates_per_ip[real_target].first;
+
+                    auto line_ostream = build_output_line(
+                            probe_infos.get_real_target6(),
+                            "INDIVIDUAL",
+                            probing_rate,
+                            change_behaviour_rate,
+                            loss_rate,
+                            transition_matrix_per_ip.transition(0,0), transition_matrix_per_ip.transition(0, 1), transition_matrix_per_ip.transition(1,0), transition_matrix_per_ip.transition(1,1),
+                            std::unordered_map<IPv6Address, double>());
 
                     ostream << line_ostream.str();
                     if (has_found_triggering_rate) {
@@ -423,10 +446,15 @@ namespace {
         // Probe groups
         for (const auto &group : groups) {
             std::unordered_map<IPv4Address, std::unordered_map<int, double>> loss_rates;
+
+            // For correlation
             std::unordered_map<IPv4Address, std::unordered_map<int, std::vector<responsive_info_probe_t>>> raw_responsiveness_candidates;
             std::unordered_map<IPv4Address, std::unordered_map<int, std::vector<responsive_info_probe_t>>> raw_responsiveness_witnesses;
 
-            //TODO Optimize the groups by changing those who have a non coherent (to determine) triggering rate.
+            // For transition matrix
+            std::unordered_map<IPv4Address, std::unordered_map<int, gilbert_elliot_t >> transition_matrices;
+
+
             auto min_probing_rate_group = 0;
             auto max_probing_rate_group = 0;
             auto icmp_type = group.second[0].icmp_type_str();
@@ -500,6 +528,8 @@ namespace {
 
                 for (const auto &probe_info : group.second) {
                     auto real_target = probe_info.get_real_target4();
+
+                    // Changing behaviour moment
                     if (triggering_rates_per_ip.at(real_target) != std::make_pair(-1, -1)) {
                         triggering_rates_groups[real_target][probing_rate] = triggering_rates_per_ip[real_target];
                     }
@@ -510,6 +540,9 @@ namespace {
                     } else if (probe_info.get_interface_type() == interface_type_t::WITNESS) {
                         raw_responsiveness_witnesses[real_target][probing_rate] = raw;
                     }
+
+                    // Transition matrices
+                    transition_matrices[real_target][probing_rate] = rate_limit_analyzer.compute_loss_model4(real_target);
 
                 }
                 std::this_thread::sleep_for(std::chrono::seconds(5));
@@ -583,9 +616,19 @@ namespace {
                                 }
                             }
                         }
-                        auto line_stream = build_output_line(real_target4, "GROUPSPR",
-                                                             probing_rate, loss_rates[real_target4][probing_rate],
-                                                             correlations_map
+                        auto change_behaviour_rate = triggering_rates_groups[real_target4][probing_rate].first;
+
+                        auto line_stream = build_output_line(
+                                real_target4,
+                                "GROUPSPR",
+                                probing_rate,
+                                change_behaviour_rate,
+                                loss_rates[real_target4][probing_rate],
+                                transition_matrices[real_target4][probing_rate].transition(0,0),
+                                transition_matrices[real_target4][probing_rate].transition(0,1),
+                                transition_matrices[real_target4][probing_rate].transition(1,0),
+                                transition_matrices[real_target4][probing_rate].transition(1,1),
+                                correlations_map
                         );
                         ostream << line_stream.str();
                     }
@@ -604,9 +647,19 @@ namespace {
                         if (probing_rate > max_probing_rate){
                             continue;
                         }
-                        auto line_stream = build_output_line(real_target4, "GROUPDPR",
-                                                             probing_rate, loss_rates[real_target4][probing_rate],
-                                                             std::unordered_map<IPv4Address, double>());
+                        auto change_behaviour_rate = triggering_rates_groups[real_target4][probing_rate].first;
+
+                        auto line_stream = build_output_line(
+                                real_target4,
+                                "GROUPDPR",
+                                probing_rate,
+                                change_behaviour_rate,
+                                loss_rates[real_target4][probing_rate],
+                                transition_matrices[real_target4][probing_rate].transition(0,0),
+                                transition_matrices[real_target4][probing_rate].transition(0,1),
+                                transition_matrices[real_target4][probing_rate].transition(1,0),
+                                transition_matrices[real_target4][probing_rate].transition(1,1),
+                                std::unordered_map<IPv4Address, double>());
                         ostream << line_stream.str();
                     }
                 }
@@ -642,6 +695,8 @@ namespace {
         std::unordered_map<int, std::unordered_map<int, std::string>> pcap_groups_files;
         std::unordered_map<IPv6Address, std::unordered_map<int, packet_interval_t >> triggering_rates_groups;
 
+
+
         // Build groups
         std::cout << "Building groups\n";
 
@@ -658,11 +713,17 @@ namespace {
 
         // Probe groups
         for (const auto &group : groups) {
+
+            // For loss rates
             std::unordered_map<IPv6Address, std::unordered_map<int, double>> loss_rates;
+
+            // For correlation
             std::unordered_map<IPv6Address, std::unordered_map<int, std::vector<responsive_info_probe_t>>> raw_responsiveness_candidates;
             std::unordered_map<IPv6Address, std::unordered_map<int, std::vector<responsive_info_probe_t>>> raw_responsiveness_witnesses;
 
-            //TODO Optimize the groups by changing those who have a non coherent (to determine) triggering rate.
+            // For transition matrix
+            std::unordered_map<IPv6Address, std::unordered_map<int, gilbert_elliot_t >> transition_matrices;
+
             auto min_probing_rate_group = 0;
             auto max_probing_rate_group = 0;
             auto icmp_type = group.second[0].icmp_type_str();
@@ -736,9 +797,12 @@ namespace {
 
                 for (const auto &probe_info : group.second) {
                     auto real_target = probe_info.get_real_target6();
+
+                    // Changing behaviour rate
                     if (triggering_rates_per_ip.at(real_target) != std::make_pair(-1, -1)) {
                         triggering_rates_groups[real_target][probing_rate] = triggering_rates_per_ip[real_target];
                     }
+
                     // Raw data
                     auto raw = rate_limit_analyzer.get_raw_packets6(real_target);
                     if (probe_info.get_interface_type() == interface_type_t::CANDIDATE) {
@@ -746,6 +810,9 @@ namespace {
                     } else if (probe_info.get_interface_type() == interface_type_t::WITNESS) {
                         raw_responsiveness_witnesses[real_target][probing_rate] = raw;
                     }
+
+                    // Transition matrices
+                    transition_matrices[real_target][probing_rate] = rate_limit_analyzer.compute_loss_model6(real_target);
 
                 }
                 std::this_thread::sleep_for(std::chrono::seconds(5));
@@ -819,10 +886,19 @@ namespace {
                                 }
                             }
                         }
-                        auto line_stream = build_output_line(real_target6, "GROUPSPR",
-                                                             probing_rate, loss_rates[real_target6][probing_rate],
-                                                             correlations_map
-                                                             );
+                        auto change_behaviour_rate = triggering_rates_groups[real_target6][probing_rate].first;
+
+                        auto line_stream = build_output_line(
+                                real_target6,
+                                "GROUPSPR",
+                                probing_rate,
+                                change_behaviour_rate,
+                                loss_rates[real_target6][probing_rate],
+                                transition_matrices[real_target6][probing_rate].transition(0,0),
+                                transition_matrices[real_target6][probing_rate].transition(0,1),
+                                transition_matrices[real_target6][probing_rate].transition(1,0),
+                                transition_matrices[real_target6][probing_rate].transition(1,1),
+                                correlations_map);
                         ostream << line_stream.str();
                     }
                 }
@@ -840,9 +916,19 @@ namespace {
                         if (probing_rate > max_probing_rate){
                             continue;
                         }
-                        auto line_stream = build_output_line(real_target6, "GROUPDPR",
-                                                             probing_rate, loss_rates[real_target6][probing_rate],
-                                                             std::unordered_map<IPv6Address, double>());
+                        auto change_behaviour_rate = triggering_rates_groups[real_target6][probing_rate].first;
+
+                        auto line_stream = build_output_line(
+                                real_target6,
+                                "GROUPDPR",
+                                probing_rate,
+                                change_behaviour_rate,
+                                loss_rates[real_target6][probing_rate],
+                                transition_matrices[real_target6][probing_rate].transition(0,0),
+                                transition_matrices[real_target6][probing_rate].transition(0,1),
+                                transition_matrices[real_target6][probing_rate].transition(1,0),
+                                transition_matrices[real_target6][probing_rate].transition(1,1),
+                                std::unordered_map<IPv6Address, double>());
                         ostream << line_stream.str();
                     }
                 }

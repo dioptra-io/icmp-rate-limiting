@@ -7,6 +7,7 @@
 #include <chrono>
 #include <rate_limit_analyzer_t.hpp>
 #include <utils/maths_utils_t.hpp>
+#include <sstream>
 
 using namespace Tins;
 
@@ -481,14 +482,6 @@ rate_limit_analyzer_t::compute_loss_model(const std::vector<responsive_info_prob
     return loss_model;
 }
 
-void rate_limit_analyzer_t::dump_gilbert_eliot() {
-
-    std::for_each(packets_per_interface4.begin(), packets_per_interface4.end(), [this](const auto & packets_interface){
-        std::cout << packets_interface.first << "\n";
-        gilbert_elliot_t loss_model = this->compute_loss_model(packets_interface.second);
-        this->dump_transition_matrix(loss_model);
-    });
-}
 
 void rate_limit_analyzer_t::dump_transition_matrix(const gilbert_elliot_t &loss_model) {
     std::cout << "P(R, R) = " << loss_model.transition(0, 0) << "\n";
@@ -537,8 +530,12 @@ std::vector<responsive_info_probe_t> rate_limit_analyzer_t::get_raw_packets6(con
     return std::vector<responsive_info_probe_t>();
 }
 
-gilbert_elliot_t rate_limit_analyzer_t::compute_loss_model(const Tins::IPv4Address &address) const{
+gilbert_elliot_t rate_limit_analyzer_t::compute_loss_model4(const Tins::IPv4Address &address) const{
     return compute_loss_model(packets_per_interface4.at(address));
+}
+
+gilbert_elliot_t rate_limit_analyzer_t::compute_loss_model6(const Tins::IPv6Address &address) const{
+    return compute_loss_model(packets_per_interface6.at(address));
 }
 
 packet_interval_t rate_limit_analyzer_t::compute_icmp_triggering_rate(
@@ -552,7 +549,7 @@ packet_interval_t rate_limit_analyzer_t::compute_icmp_triggering_rate(
     auto global_loss_rate = compute_loss_rate(data);
     if (global_loss_rate > global_loss_rate_treshold) {
         for (int i = 0; i < data.size() - interval_length; i += interval_length / 2) {
-            auto last_index = data.begin();
+            decltype(data.begin()) last_index;
             if ((i + 2 * interval_length) < data.size()) {
                 last_index = data.begin() + i + interval_length;
             } else {
@@ -592,6 +589,50 @@ rate_limit_analyzer_t::compute_icmp_triggering_rate6() const {
         icmp_triggering_rate[responsiveness_ip.first] = triggering_rate;
     }
     return icmp_triggering_rate;
+}
+
+
+std::string rate_limit_analyzer_t::serialize_raw4() {
+    int i = 0;
+    std::stringstream serialized_raw;
+    serialized_raw << "{";
+    for (const auto & address_packets : packets_per_interface4){
+        if (i != 0){
+            serialized_raw << ",";
+        }
+        serialized_raw << address_packets.first;
+        serialized_raw << ":";
+        serialized_raw << serialize_raw4(address_packets.first);
+
+        i += 1;
+    }
+    serialized_raw << "}";
+
+    return serialized_raw.str();
+}
+
+std::string rate_limit_analyzer_t::serialize_raw4(const Tins::IPv4Address & address) {
+
+    int i = 0;
+
+    std::stringstream serialized_raw;
+    serialized_raw << "[";
+
+    for (const auto & packet : packets_per_interface4.at(address)){
+        if (i != 0){
+         serialized_raw << ", ";
+        }
+        if (packet.first){
+            serialized_raw << "1";
+        } else {
+            serialized_raw << "0";
+        }
+        i += 1;
+    }
+
+    serialized_raw  << "]";
+
+    return serialized_raw.str();
 }
 
 

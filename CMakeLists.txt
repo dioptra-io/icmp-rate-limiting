@@ -15,12 +15,16 @@ set(Boost_USE_STATIC_RUNTIME OFF)
 find_package(Boost REQUIRED COMPONENTS filesystem system iostreams)
 if(Boost_FOUND)
     include_directories(${Boost_INCLUDE_DIRS})
-    #add_executable(ICMPPlot icmp_plot.cpp ${SOURCES} ${EXTERNAL_SOURCES})
+#    add_executable(ICMPPlot icmp_plot.cpp ${SOURCES} ${EXTERNAL_SOURCES})
     #add_executable(ICMPRateLimiting icmp_trigger.cpp ${SOURCES} ${EXTERNAL_SOURCES})
     add_executable(ICMPEndToEnd icmp_rate_limiting_alias_test.cpp ${SOURCES} ${EXTERNAL_SOURCES})
+    add_executable(ICMPDumpRaw icmp_dump_raw.cpp ${SOURCES} ${EXTERNAL_SOURCES})
+
     #target_link_libraries(ICMPRateLimiting pthread tins ${Boost_LIBRARIES})
-    #target_link_libraries(ICMPPlot pthread tins ${Boost_LIBRARIES})
+#    target_link_libraries(ICMPPlot pthread tins ${Boost_LIBRARIES})
     target_link_libraries(ICMPEndToEnd pthread tins ${Boost_LIBRARIES})
+    target_link_libraries(ICMPDumpRaw pthread tins ${Boost_LIBRARIES})
+
 endif()
 
 #add_executable(StatsAlgoTest src/test/math_utils_test_t.cpp)
