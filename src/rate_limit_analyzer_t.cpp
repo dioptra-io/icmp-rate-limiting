@@ -473,7 +473,12 @@ rate_limit_analyzer_t::compute_loss_model(const std::vector<responsive_info_prob
             auto total_transition_state = std::accumulate(n_transitions[i].begin(), n_transitions[i].end(), 0);
 
             for(int j = 0; j < n_transitions[i].size(); ++j){
-                loss_model.transition(i, j, static_cast<double>(n_transitions[i][j])/ total_transition_state);
+                if (total_transition_state == 0){
+                    loss_model.transition(i, j, 0);
+                } else {
+                    loss_model.transition(i, j, static_cast<double>(n_transitions[i][j])/ total_transition_state);
+                }
+
             }
         }
     }
@@ -581,6 +586,13 @@ rate_limit_analyzer_t::compute_icmp_triggering_rate4() const {
     return icmp_triggering_rate;
 }
 
+packet_interval_t
+rate_limit_analyzer_t::compute_icmp_triggering_rate4(const IPv4Address & ip_address) const {
+    auto raw = packets_per_interface4.at(ip_address);
+    auto triggering_rate = compute_icmp_triggering_rate(raw);
+    return triggering_rate;
+}
+
 std::unordered_map<IPv6Address, packet_interval_t>
 rate_limit_analyzer_t::compute_icmp_triggering_rate6() const {
     std::unordered_map<IPv6Address, packet_interval_t> icmp_triggering_rate;
@@ -589,6 +601,14 @@ rate_limit_analyzer_t::compute_icmp_triggering_rate6() const {
         icmp_triggering_rate[responsiveness_ip.first] = triggering_rate;
     }
     return icmp_triggering_rate;
+}
+
+packet_interval_t
+rate_limit_analyzer_t::compute_icmp_triggering_rate6(const IPv6Address & ip_address) const {
+    std::unordered_map<IPv4Address, packet_interval_t> icmp_triggering_rate;
+    auto raw = packets_per_interface6.at(ip_address);
+    auto triggering_rate = compute_icmp_triggering_rate(raw);
+    return triggering_rate;
 }
 
 
@@ -634,6 +654,39 @@ std::string rate_limit_analyzer_t::serialize_raw4(const Tins::IPv4Address & addr
 
     return serialized_raw.str();
 }
+
+
+
+double rate_limit_analyzer_t::correlation(const std::vector<responsive_info_probe_t> &raw_router_1,
+                   const std::vector<responsive_info_probe_t> &raw_router_2) {
+
+
+
+    auto responsive_to_binary = [](const responsive_info_probe_t & responsive_info_probe){
+        return responsive_info_probe.first ? 1 : 0;
+    };
+
+    std::vector<double> X;
+    std::transform(raw_router_1.begin(), raw_router_1.end(), std::back_inserter(X), responsive_to_binary);
+    std::vector<double> Y;
+    std::transform(raw_router_2.begin(), raw_router_2.end(), std::back_inserter(Y), responsive_to_binary);
+
+    auto cor = utils::cov_correlation(X, Y).second;
+
+    return cor;
+}
+
+
+double rate_limit_analyzer_t::correlation4(const IPv4Address &ip_address1,
+                                           const IPv4Address &ip_address2) {
+    return correlation(packets_per_interface4[ip_address1], packets_per_interface4[ip_address2]);
+}
+
+double rate_limit_analyzer_t::correlation6(const IPv6Address &ip_address1,
+                                           const IPv6Address &ip_address2) {
+    return correlation(packets_per_interface6[ip_address1], packets_per_interface6[ip_address2]);
+}
+
 
 
 

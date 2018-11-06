@@ -41,24 +41,60 @@ public:
     using responsiveness_time_interval_t = std::tuple<bool, int, time_interval_t >;
     using time_series_t = std::vector<responsiveness_time_interval_t>;
 
+    /**
+     * Compute the responsiveness and put it in the packets_per_interface
+     * @param pcap_file
+     */
     void start(const std::string &pcap_file);
 
     std::unordered_map<Tins::IPv4Address, time_series_t> extract_responsiveness_time_series4();
     std::unordered_map<Tins::IPv6Address, time_series_t> extract_responsiveness_time_series6();
-    
+
+    /**
+     * Compute the loss rate
+     * @return
+     */
     std::unordered_map<Tins::IPv4Address, double> compute_loss_rate4();
     double compute_loss_rate(const Tins::IPv4Address & ip) const;
 
     std::unordered_map<Tins::IPv6Address, double> compute_loss_rate6();
     double compute_loss_rate(const Tins::IPv6Address & ip) const;
 
+    /**
+     * Compute the transition matrices
+     * @param address
+     * @return
+     */
     gilbert_elliot_t compute_loss_model4(const Tins::IPv4Address & address) const;
     gilbert_elliot_t compute_loss_model6(const Tins::IPv6Address & address) const;
 
-
+    /**
+     * Compute the changing behaviour moment of a time serie
+     * @return
+     */
     std::unordered_map<Tins::IPv4Address, utils::packet_interval_t> compute_icmp_triggering_rate4() const;
 
     std::unordered_map<Tins::IPv6Address, utils::packet_interval_t> compute_icmp_triggering_rate6() const;
+
+    utils::packet_interval_t compute_icmp_triggering_rate4(const Tins::IPv4Address &) const;
+
+    utils::packet_interval_t compute_icmp_triggering_rate6(const Tins::IPv6Address &) const;
+
+
+    /**
+     * Compute the correlation between two time series (they must have almost the same number of element)
+     * @param ip_address1
+     * @param ip_address2
+     * @return
+     */
+
+    double correlation4(const Tins::IPv4Address &ip_address1,
+                       const Tins::IPv4Address &ip_address2);
+
+    double correlation6(const Tins::IPv6Address &ip_address1,
+                        const Tins::IPv6Address &ip_address2);
+
+
 
 
     void dump_loss_rate();
@@ -85,6 +121,9 @@ private:
     // Private functions to compute statistics indicators.
     double compute_loss_rate(const std::vector<utils::responsive_info_probe_t> & responsive_info_probes) const;
     gilbert_elliot_t compute_loss_model(const std::vector<utils::responsive_info_probe_t> & responsive_info_probes) const;
+    double correlation(const std::vector<utils::responsive_info_probe_t> &raw_router_1,
+                       const std::vector<utils::responsive_info_probe_t> &raw_router_2);
+
 
     time_series_t extract_responsiveness_time_series(const std::vector <utils::responsive_info_probe_t> & packet_serie);
     rate_limit_estimate_t compute_mean_stddev(const time_series_t & responsiveness_time_interval );
