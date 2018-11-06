@@ -209,16 +209,19 @@ int main(int argc, char * argv[]){
     bool analyse_only = false;
     bool probe_only = false;
     auto targets_file_path = std::string("");
-
+    std::string output_dir_individual {"resources/pcap/individual/"};
+    std::string output_dir_groups {"resources/pcap/groups/"};
 
     // Declare the supported options.
     po::options_description desc("Allowed options");
     desc.add_options()
-            ("help, h", help_message.c_str())
-            ("targets-file, t", po::value<std::string>(), "Format is GROUP_ID, ADDRESS_FAMILY, PROBING_TYPE (DIRECT, INDIRECT), PROTOCOL (tcp, udp, icmp), INTERFACE_TYPE (CANDIDATE, WITNESS),"\
+            ("help,h", help_message.c_str())
+            ("targets-file,t", po::value<std::string>(), "Format is GROUP_ID, ADDRESS_FAMILY, PROBING_TYPE (DIRECT, INDIRECT), PROTOCOL (tcp, udp, icmp), INTERFACE_TYPE (CANDIDATE, WITNESS),"\
                                                      "REAL_ADDRESS, PROBING_ADDRESS, FLOW_ID (v6), SRC_PORT(v4) , DST_PORT(v4)." )
-            ("analyse-only, a", "do not probe, only start analysis")
-            ("probe-only, a", "do not analyse, only probe");
+            ("individual-dir,i", po::value<std::string>(), "directory for individual probing pcap files")
+            ("group-dir,g", po::value<std::string>(), "directory for group probing pcap files")
+            ("analyse-only,a", "do not probe, only start analysis")
+            ("probe-only,p", "do not analyse, only probe");
 
     po::variables_map vm;
     po::store(po::parse_command_line(argc, argv, desc), vm);
@@ -240,6 +243,20 @@ int main(int argc, char * argv[]){
         exit(1);
     }
 
+    if (vm.count("individual-dir")) {
+        output_dir_individual = vm["individual-dir"].as<std::string>();
+        std::cout << "output individual dir set to  "
+                  << output_dir_individual << ".\n";
+
+
+    }
+
+    if (vm.count("group-dir")) {
+        output_dir_groups = vm["group-dir"].as<std::string>();
+        std::cout << "output groups dir set to  "
+                  << output_dir_groups << ".\n";
+    }
+
     if (vm.count("analyse-only")) {
         analyse_only = true;
     }
@@ -256,12 +273,6 @@ int main(int argc, char * argv[]){
      */
 
     auto max_probing_rate = 10000;
-
-    std::string output_dir_individual {"resources/pcap/individual/"};
-    std::string output_dir_groups {"resources/pcap/groups/"};
-
-
-    // Groups
 
 
     /**
