@@ -53,6 +53,7 @@ namespace utils{
 
     std::vector<icmp_trigger_probes_t> build_icmp_trigger_probes_from_file(const std::string &file_name,
                                                                            const Tins::IPv4Address &source);
+
 }
 
 #endif //ICMPRATELIMITING_FILE_UTILS_T_HPP

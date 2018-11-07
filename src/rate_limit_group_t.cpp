@@ -212,7 +212,11 @@ std::stringstream rate_limit_group_t::analyse_group_probes4(
 
     for (const auto & group : groups){
         for (const auto probing_rate : probing_rates){
-            ostream << analyse_group_probes4(group.second, probing_rate, group_type, output_dir_group).str();
+            try{
+                ostream << analyse_group_probes4(group.second, probing_rate, group_type, output_dir_group).str();
+            } catch (const pcap_error & e){
+                std::cerr << e.what() << "\n";
+            }
         }
 
     }
@@ -406,7 +410,12 @@ std::stringstream rate_limit_group_t::analyse_group_probes6(
 
     for (const auto & group : groups){
         for (const auto probing_rate : probing_rates){
-            ostream << analyse_group_probes6(group.second, probing_rate, group_type, output_dir_group).str();
+            try{
+                ostream << analyse_group_probes6(group.second, probing_rate, group_type, output_dir_group).str();
+            } catch (const pcap_error & e){
+                std::cerr << e.what() << "\n";
+            }
+
         }
 
     }

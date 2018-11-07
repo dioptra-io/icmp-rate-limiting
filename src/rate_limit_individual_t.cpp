@@ -107,7 +107,12 @@ std::stringstream rate_limit_individual_t::analyse_individual_probes4(const std:
             auto real_target = probe_infos.get_real_target4();
             auto icmp_type = probe_infos.icmp_type_str();
             auto pcap_file = build_pcap_name(output_dir_individual, icmp_type, real_target.to_string(), "INDIVIDUAL", probing_rate);
-            ostream << analyse_individual_probes4(probe_infos, probing_rate, pcap_file).str();
+            try {
+                ostream << analyse_individual_probes4(probe_infos, probing_rate, pcap_file).str();
+            } catch (const pcap_error & error) {
+                std::cerr << error.what() << "\n";
+            }
+
         }
 
     }
@@ -212,7 +217,11 @@ std::stringstream rate_limit_individual_t::analyse_individual_probes6(const std:
             auto real_target = probe_infos.get_real_target6();
             auto icmp_type = probe_infos.icmp_type_str();
             auto pcap_file = build_pcap_name(output_dir_individual, icmp_type, real_target.to_string(), "INDIVIDUAL", probing_rate);
-            ostream << analyse_individual_probes6(probe_infos, probing_rate, pcap_file).str();
+            try {
+                ostream << analyse_individual_probes6(probe_infos, probing_rate, pcap_file).str();
+            } catch (const pcap_error & error) {
+                std::cerr << error.what() << "\n";
+            }
         }
 
     }

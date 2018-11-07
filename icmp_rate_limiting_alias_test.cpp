@@ -182,6 +182,7 @@ namespace {
     }
 }
 
+
 int main(int argc, char * argv[]){
     /**
     * END TO END ALGORITHM TO DETERMINE IF TWO ADDRESSES ARE ALIASES.
@@ -209,8 +210,9 @@ int main(int argc, char * argv[]){
     bool analyse_only = false;
     bool probe_only = false;
     auto targets_file_path = std::string("");
-    std::string output_dir_individual {"resources/pcap/individual/"};
-    std::string output_dir_groups {"resources/pcap/groups/"};
+    std::string pcap_dir_individual {"resources/pcap/individual/"};
+    std::string pcap_dir_groups {"resources/pcap/groups/"};
+    std::string output_prefix;
 
     // Declare the supported options.
     po::options_description desc("Allowed options");
@@ -218,8 +220,9 @@ int main(int argc, char * argv[]){
             ("help,h", help_message.c_str())
             ("targets-file,t", po::value<std::string>(), "Format is GROUP_ID, ADDRESS_FAMILY, PROBING_TYPE (DIRECT, INDIRECT), PROTOCOL (tcp, udp, icmp), INTERFACE_TYPE (CANDIDATE, WITNESS),"\
                                                      "REAL_ADDRESS, PROBING_ADDRESS, FLOW_ID (v6), SRC_PORT(v4) , DST_PORT(v4)." )
-            ("individual-dir,i", po::value<std::string>(), "directory for individual probing pcap files")
-            ("group-dir,g", po::value<std::string>(), "directory for group probing pcap files")
+            ("pcap-individual-dir,i", po::value<std::string>(), "directory for individual probing pcap files")
+            ("pcap-group-dir,g", po::value<std::string>(), "directory for group probing pcap files")
+            ("output-prefix,o", po::value<std::string>(), "directory the output of the analysis")
             ("analyse-only,a", "do not probe, only start analysis")
             ("probe-only,p", "do not analyse, only probe");
 
@@ -235,7 +238,7 @@ int main(int argc, char * argv[]){
     if (vm.count("targets-file")) {
         targets_file_path = vm["targets-file"].as<std::string>();
         std::cout << "Targets file was set to "
-             << targets_file_path << ".\n";
+             << targets_file_path << "\n";
 
 
     } else {
@@ -243,18 +246,24 @@ int main(int argc, char * argv[]){
         exit(1);
     }
 
-    if (vm.count("individual-dir")) {
-        output_dir_individual = vm["individual-dir"].as<std::string>();
-        std::cout << "output individual dir set to  "
-                  << output_dir_individual << ".\n";
+    if (vm.count("pcap-individual-dir")) {
+        pcap_dir_individual = vm["pcap-individual-dir"].as<std::string>();
+        std::cout << "pcap individual dir set to  "
+                  << pcap_dir_individual << "\n";
 
 
     }
 
-    if (vm.count("group-dir")) {
-        output_dir_groups = vm["group-dir"].as<std::string>();
-        std::cout << "output groups dir set to  "
-                  << output_dir_groups << ".\n";
+    if (vm.count("pcap-group-dir")) {
+        pcap_dir_groups = vm["pcap-group-dir"].as<std::string>();
+        std::cout << "pcap groups dir set to  "
+                  << pcap_dir_groups << "\n";
+    }
+
+    if (vm.count("output-prefix")) {
+        output_prefix = vm["output-prefix"].as<std::string>();
+        std::cout << "output dir set to  "
+                  << output_prefix<< "\n";
     }
 
     if (vm.count("analyse-only")) {
@@ -293,10 +302,10 @@ int main(int argc, char * argv[]){
         rate_limit_group_t rate_limit_group;
         rate_limit_group_t rate_limit_group_dpr;
         if (!analyse_only){
-            rate_limit_individual.execute_individual_probes4(probes_infos, custom_rates, output_dir_individual);
+            rate_limit_individual.execute_individual_probes4(probes_infos, custom_rates, pcap_dir_individual);
             // Group probing same rate
             std::cout << "Proceeding to probing groups phase with same probing rate\n";
-            rate_limit_group.execute_group_probes4(probes_infos, custom_rates, "GROUPSPR", output_dir_groups);
+            rate_limit_group.execute_group_probes4(probes_infos, custom_rates, "GROUPSPR", pcap_dir_groups);
             std::cout << "Proceeding to probing groups phase with different probing rate\n";
             // Group probing different rate
             auto ratio_rate = 8;
@@ -308,18 +317,18 @@ int main(int argc, char * argv[]){
                     break;
                 }
             }
-            rate_limit_group_dpr.execute_group_probes4(probes_infos, custom_rates, "GROUPDPR", output_dir_groups);
+            rate_limit_group_dpr.execute_group_probes4(probes_infos, custom_rates, "GROUPDPR", pcap_dir_groups);
         }
         // Analysis
         if(!probe_only){
-            auto individual_ostream = rate_limit_individual.analyse_individual_probes4(probes_infos, custom_rates, output_dir_individual);
+            auto individual_ostream = rate_limit_individual.analyse_individual_probes4(probes_infos, custom_rates, pcap_dir_individual);
             ostream << individual_ostream.str();
-            auto group_spr_ostream = rate_limit_group.analyse_group_probes4(probes_infos, custom_rates, "GROUPSPR", output_dir_groups);
+            auto group_spr_ostream = rate_limit_group.analyse_group_probes4(probes_infos, custom_rates, "GROUPSPR", pcap_dir_groups);
             ostream << group_spr_ostream.str();
-            auto group_dpr_ostream = rate_limit_group_dpr.analyse_group_probes4(probes_infos, custom_rates, "GROUPDPR", output_dir_groups);
+            auto group_dpr_ostream = rate_limit_group_dpr.analyse_group_probes4(probes_infos, custom_rates, "GROUPDPR", pcap_dir_groups);
             ostream << group_dpr_ostream.str();
             std::stringstream file_name;
-
+            file_name << output_prefix;
             for (const auto & probe_infos: probes_infos){
                 file_name << "_" << probe_infos.get_real_target4();
             }
@@ -333,10 +342,10 @@ int main(int argc, char * argv[]){
         rate_limit_group_t rate_limit_group;
         rate_limit_group_t rate_limit_group_dpr;
         if (!analyse_only){
-            rate_limit_individual.execute_individual_probes6(probes_infos, custom_rates, output_dir_individual);
+            rate_limit_individual.execute_individual_probes6(probes_infos, custom_rates, pcap_dir_individual);
             // Group probing same rate
             std::cout << "Proceeding to probing groups phase with same probing rate\n";
-            rate_limit_group.execute_group_probes6(probes_infos, custom_rates, "GROUPSPR", output_dir_groups);
+            rate_limit_group.execute_group_probes6(probes_infos, custom_rates, "GROUPSPR", pcap_dir_groups);
             std::cout << "Proceeding to probing groups phase with different probing rate\n";
             // Group probing different rate
             auto ratio_rate = 8;
@@ -348,18 +357,18 @@ int main(int argc, char * argv[]){
                     break;
                 }
             }
-            rate_limit_group_dpr.execute_group_probes6(probes_infos, custom_rates, "GROUPDPR", output_dir_groups);
+            rate_limit_group_dpr.execute_group_probes6(probes_infos, custom_rates, "GROUPDPR", pcap_dir_groups);
         }
         // Analysis
         if(!probe_only){
-            auto individual_ostream = rate_limit_individual.analyse_individual_probes6(probes_infos, custom_rates, output_dir_individual);
+            auto individual_ostream = rate_limit_individual.analyse_individual_probes6(probes_infos, custom_rates, pcap_dir_individual);
             ostream << individual_ostream.str();
-            auto group_spr_ostream = rate_limit_group.analyse_group_probes6(probes_infos, custom_rates, "GROUPSPR", output_dir_groups);
+            auto group_spr_ostream = rate_limit_group.analyse_group_probes6(probes_infos, custom_rates, "GROUPSPR", pcap_dir_groups);
             ostream << group_spr_ostream.str();
-            auto group_dpr_ostream = rate_limit_group_dpr.analyse_group_probes6(probes_infos, custom_rates, "GROUPDPR", output_dir_groups);
+            auto group_dpr_ostream = rate_limit_group_dpr.analyse_group_probes6(probes_infos, custom_rates, "GROUPDPR", pcap_dir_groups);
             ostream << group_dpr_ostream.str();
             std::stringstream file_name;
-
+            file_name << output_prefix;
             for (const auto & probe_infos: probes_infos){
                 file_name << "_" << probe_infos.get_real_target6();
             }
