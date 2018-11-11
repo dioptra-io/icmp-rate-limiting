@@ -264,7 +264,7 @@ void rate_limit_analyzer_t::start(const std::string &pcap_file)  {
                         // We are in an ICMP direct probing so we match se probes with the icmp id
                         auto icmp_request = ip.find_pdu<ICMP>();
                         if (icmp_request != nullptr){
-                            if (icmp->id() == icmp_request->id()){
+                            if (icmp->sequence() == icmp_request->sequence()){
                                 return true;
                             }
                         }

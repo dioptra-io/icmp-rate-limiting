@@ -98,11 +98,14 @@ void rate_limit_sender_t::start() {
         for (int i = 0; probe_sent < nb_probes; ++i, ++probe_sent, ++ip_id){
 
             auto probe_to_send = probing_pattern[i%probing_pattern.size()];
-            probe_to_send.id(ip_id);
             auto icmp = probe_to_send.find_pdu<ICMP>();
             if (icmp != nullptr){
-                icmp->id(ip_id);
+                icmp->id(1);
+                icmp->sequence(ip_id);
+            } else {
+                probe_to_send.id(ip_id);
             }
+
             sender.send(probe_to_send);
             wait_loop(interval);
             if (probe_sent == nb_probes - 1){
