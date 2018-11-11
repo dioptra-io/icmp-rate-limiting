@@ -317,7 +317,7 @@ int main(int argc, char * argv[]){
                     break;
                 }
             }
-            rate_limit_group_dpr.execute_group_probes4(probes_infos, custom_rates, "GROUPDPR", pcap_dir_groups);
+            rate_limit_group_dpr.execute_group_probes4(probes_infos_different_rates, custom_rates, "GROUPDPR", pcap_dir_groups);
         }
         // Analysis
         if(!probe_only){
@@ -357,7 +357,7 @@ int main(int argc, char * argv[]){
                     break;
                 }
             }
-            rate_limit_group_dpr.execute_group_probes6(probes_infos, custom_rates, "GROUPDPR", pcap_dir_groups);
+            rate_limit_group_dpr.execute_group_probes6(probes_infos_different_rates, custom_rates, "GROUPDPR", pcap_dir_groups);
         }
         // Analysis
         if(!probe_only){

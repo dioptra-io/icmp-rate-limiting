@@ -4,6 +4,7 @@
 
 #include <string>
 #include <sstream>
+#include <fstream>      // std::ifstream
 #include "../../include/utils/file_utils_t.hpp"
 
 namespace utils{

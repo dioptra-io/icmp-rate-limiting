@@ -12,7 +12,6 @@
 #include <tins/tins.h>
 #include <unordered_map>
 
-
 #include "../icmp_trigger_probes_t.hpp"
 #include "container_utils_t.hpp"
 namespace utils{
