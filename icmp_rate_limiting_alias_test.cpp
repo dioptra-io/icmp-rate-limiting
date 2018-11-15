@@ -28,8 +28,8 @@ using namespace Tins;
 using namespace utils;
 namespace {
 
-    std::vector<int> custom_rates {2000, 3000};
-    std::vector<int> custom_group_rates {6000, 9000};
+    std::vector<int> custom_rates {500, 1000, 2000, 3000};
+    std::vector<int> custom_group_rates {1500, 3000, 6000, 9000};
 
     // The format of the input file should be the following:
     // GROUP_ID, ADDRESS_FAMILY, PROBING_TYPE (DIRECT, INDIRECT), PROTOCOL (tcp, udp, icmp), INTERFACE_TYPE (CANDIDATE, WITNESS),
@@ -224,7 +224,7 @@ int main(int argc, char * argv[]){
     auto targets_file_path = std::string("");
     std::string pcap_dir_individual {"resources/pcap/individual/"};
     std::string pcap_dir_groups {"resources/pcap/groups/"};
-    std::string output_prefix;
+    std::string output_file;
 
     // Declare the supported options.
     po::options_description desc("Allowed options");
@@ -234,7 +234,7 @@ int main(int argc, char * argv[]){
                                                      "REAL_ADDRESS, PROBING_ADDRESS, FLOW_ID (v6), SRC_PORT(v4) , DST_PORT(v4)." )
             ("pcap-individual-dir,i", po::value<std::string>(), "directory for individual probing pcap files")
             ("pcap-group-dir,g", po::value<std::string>(), "directory for group probing pcap files")
-            ("output-prefix,o", po::value<std::string>(), "directory the output of the analysis")
+            ("output-file,o", po::value<std::string>(), "output file of the analysis")
             ("group-only,G", "only do group probing")
             ("analyse-only,a", "do not probe, only start analysis")
             ("probe-only,p", "do not analyse, only probe");
@@ -273,10 +273,10 @@ int main(int argc, char * argv[]){
                   << pcap_dir_groups << "\n";
     }
 
-    if (vm.count("output-prefix")) {
-        output_prefix = vm["output-prefix"].as<std::string>();
-        std::cout << "output dir set to  "
-                  << output_prefix<< "\n";
+    if (vm.count("output-file")) {
+        output_file = vm["output-file"].as<std::string>();
+        std::cout << "output file set to  "
+                  << output_file<< "\n";
     }
     if (vm.count("group-only")){
         group_only = true;
@@ -351,12 +351,7 @@ int main(int argc, char * argv[]){
             ostream << group_spr_ostream.str();
             auto group_dpr_ostream = rate_limit_group_dpr.analyse_group_probes4(probes_infos, custom_group_rates, "GROUPDPR", pcap_dir_groups);
             ostream << group_dpr_ostream.str();
-            std::stringstream file_name;
-            file_name << output_prefix;
-            for (const auto & probe_infos: probes_infos){
-                file_name << "_" << probe_infos.get_real_target4();
-            }
-            std::ofstream outfile (file_name.str());
+            std::ofstream outfile (output_file);
             outfile << ostream.str() << "\n";
         }
 
@@ -397,12 +392,7 @@ int main(int argc, char * argv[]){
             ostream << group_spr_ostream.str();
             auto group_dpr_ostream = rate_limit_group_dpr.analyse_group_probes6(probes_infos, custom_group_rates, "GROUPDPR", pcap_dir_groups);
             ostream << group_dpr_ostream.str();
-            std::stringstream file_name;
-            file_name << output_prefix;
-            for (const auto & probe_infos: probes_infos){
-                file_name << "_" << probe_infos.get_real_target6();
-            }
-            std::ofstream outfile (file_name.str());
+            std::ofstream outfile (output_file);
             outfile << ostream.str() << "\n";
         }
     }
