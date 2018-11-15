@@ -82,6 +82,7 @@ std::vector<IPv6> rate_limit_sender_t::build_probing_pattern6() {
 }
 
 void rate_limit_sender_t::start() {
+    // 1 packet / interval
     auto interval = 1000000/probing_rate;
     int probe_sent = 0;
 

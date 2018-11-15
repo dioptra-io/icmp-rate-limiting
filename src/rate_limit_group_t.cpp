@@ -32,8 +32,6 @@ void rate_limit_group_t::execute_group_probes4(const NetworkInterface & sniff_in
                            const std::string & group_type,
                            const std::string & output_dir_group ){
 
-    probing_rate *= group.size();
-
     auto nb_probes = 5 * probing_rate;
     auto icmp_type = group[0].icmp_type_str();
 
@@ -115,7 +113,7 @@ std::stringstream rate_limit_group_t::analyse_group_probes4(
 
     auto pcap_file = build_pcap_name(output_dir_group, icmp_type, to_file_name(group, '_'),
                                      group_type,
-                                     static_cast<int>(group.size() * probing_rate));
+                                     probing_rate);
 
     rate_limit_analyzer_t rate_limit_analyzer(probing_style, matchers);
 
@@ -172,7 +170,7 @@ std::stringstream rate_limit_group_t::analyse_group_probes4(
         auto line_stream = build_output_line(
                 real_target,
                 group_type,
-                static_cast<int>(group.size() * probing_rate),
+                probing_rate,
                 changing_behaviour_time.first,
                 loss_rate,
                 transition_matrix.transition(0,0),
@@ -229,8 +227,6 @@ void rate_limit_group_t::execute_group_probes6(const NetworkInterface & sniff_in
                                                int probing_rate,
                                                const std::string & group_type,
                                                const std::string & output_dir_group ){
-
-    probing_rate *= group.size();
 
     auto nb_probes = 5 * probing_rate;
     auto icmp_type = group[0].icmp_type_str();
@@ -313,7 +309,7 @@ std::stringstream rate_limit_group_t::analyse_group_probes6(
 
     auto pcap_file = build_pcap_name(output_dir_group, icmp_type, to_file_name(group, '_'),
                                      group_type,
-                                     static_cast<int>(group.size() * probing_rate));
+                                     probing_rate);
 
     rate_limit_analyzer_t rate_limit_analyzer(probing_style, matchers);
 
@@ -370,7 +366,7 @@ std::stringstream rate_limit_group_t::analyse_group_probes6(
         auto line_stream = build_output_line(
                 real_target,
                 group_type,
-                static_cast<int>(group.size() * probing_rate),
+                probing_rate,
                 changing_behaviour_time.first,
                 loss_rate,
                 transition_matrix.transition(0,0),

@@ -12,7 +12,13 @@ include_directories(EasyBMP_1)
 set(Boost_USE_STATIC_LIBS OFF)
 set(Boost_USE_MULTITHREADED ON)
 set(Boost_USE_STATIC_RUNTIME OFF)
+
+if(APPLE)
+    # Mojave has removed /usr/local/lib from library path?
+    link_directories(/usr/local/lib/)
+endif()
 find_package(Boost REQUIRED COMPONENTS filesystem system iostreams program_options)
+
 if(Boost_FOUND)
     include_directories(${Boost_INCLUDE_DIRS})
 #    add_executable(ICMPPlot icmp_plot.cpp ${SOURCES} ${EXTERNAL_SOURCES})
