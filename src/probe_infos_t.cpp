@@ -95,17 +95,42 @@ const IPv6Address &probe_infos_t::get_real_target6() const {
 
 std::string to_file_name (const std::vector<probe_infos_t> & alias_test, char separator){
     std::stringstream ss;
+
+    // To avoid to reach the limit of file_name, cut the file_name to 2 candidates and 1 witness, even if there are more than
+    // 2 candidates
+    auto candidates = 0;
     for (int i = 0; i < alias_test.size(); ++i){
 
         if (i != 0){
             ss << separator;
         }
-        if (alias_test[i].get_family() == PDU::PDUType::IP){
-            ss << alias_test[i].get_real_target4();
-        } else if (alias_test[i].get_family() == PDU::PDUType::IPv6){
-            ss << alias_test[i].get_real_target6();
-        }
 
+        if (alias_test[i].get_interface_type() == interface_type_t::CANDIDATE) {
+            if (alias_test[i].get_family() == PDU::PDUType::IP) {
+                ss << alias_test[i].get_real_target4();
+            } else if (alias_test[i].get_family() == PDU::PDUType::IPv6) {
+                ss << alias_test[i].get_real_target6();
+            }
+            candidates += 1;
+            if (candidates == 2){
+                break;
+            }
+
+        }
     }
+
+    for (int i = 0; i < alias_test.size(); ++i){
+        if (alias_test[i].get_interface_type() == interface_type_t::WITNESS){
+            ss << separator;
+            if (alias_test[i].get_family() == PDU::PDUType::IP){
+                ss << alias_test[i].get_real_target4();
+            } else if (alias_test[i].get_family() == PDU::PDUType::IPv6){
+                ss << alias_test[i].get_real_target6();
+            }
+            break;
+        }
+    }
+
+
     return ss.str();
 }
