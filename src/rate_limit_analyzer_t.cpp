@@ -8,6 +8,8 @@
 #include <rate_limit_analyzer_t.hpp>
 #include <utils/maths_utils_t.hpp>
 #include <sstream>
+#include <cmath>
+
 
 using namespace Tins;
 
@@ -257,11 +259,23 @@ void rate_limit_analyzer_t::start(const std::string &pcap_file)  {
             auto ip = outgoing_pdu->rfind_pdu<Tins::IP>();
 
             auto it = std::find_if(icmp_replies.begin(), icmp_replies.end(), [&ip](const Tins::Packet & matching_packet){
+
+
                 auto pdu = matching_packet.pdu();
+                auto reply_ip = pdu->find_pdu<IP>();
                 auto icmp = pdu->find_pdu<Tins::ICMP>();
+
+                // We assume direct probing so check only the source
+
+                // Check first the destination
+                auto destination = ip.dst_addr();
+                if (destination != reply_ip->src_addr()){
+                    return false;
+                }
+
                 if (icmp->type() == Tins::ICMP::Flags::ECHO_REPLY){
                     try{
-                        // We are in an ICMP direct probing so we match se probes with the icmp id
+                        // We are in an ICMP direct probing so we match se probes with the icmp sequence number
                         auto icmp_request = ip.find_pdu<ICMP>();
                         if (icmp_request != nullptr){
                             if (icmp->sequence() == icmp_request->sequence()){
@@ -338,12 +352,23 @@ void rate_limit_analyzer_t::start(const std::string &pcap_file)  {
             auto it = std::find_if(icmp_replies.begin(), icmp_replies.end(), [&ip](const Tins::Packet & matching_packet){
                 auto pdu = matching_packet.pdu();
                 auto icmp = pdu->find_pdu<Tins::ICMPv6>();
+
+                auto reply_ip = pdu->find_pdu<IPv6>();
+
+                // We assume direct probing so check only the source
+
+                // Check first the destination
+                auto destination = ip.dst_addr();
+                if (destination != reply_ip->src_addr()){
+                    return false;
+                }
+
                 if (icmp->type() == Tins::ICMPv6::Types::ECHO_REPLY){
                     try{
                         // We are in an ICMP direct probing so we match se probes with the icmp id
                         auto icmp_request = ip.find_pdu<ICMPv6>();
                         if (icmp_request != nullptr){
-                            if (icmp->identifier() == icmp_request->identifier()){
+                            if (icmp->sequence() == icmp_request->sequence()){
                                 return true;
                             }
                         }
@@ -620,8 +645,9 @@ std::string rate_limit_analyzer_t::serialize_raw4() {
         if (i != 0){
             serialized_raw << ",";
         }
+        serialized_raw << "\"";
         serialized_raw << address_packets.first;
-        serialized_raw << ":";
+        serialized_raw << "\":";
         serialized_raw << serialize_raw4(address_packets.first);
 
         i += 1;
@@ -685,6 +711,62 @@ double rate_limit_analyzer_t::correlation4(const IPv4Address &ip_address1,
 double rate_limit_analyzer_t::correlation6(const IPv6Address &ip_address1,
                                            const IPv6Address &ip_address2) {
     return correlation(packets_per_interface6[ip_address1], packets_per_interface6[ip_address2]);
+}
+
+double rate_limit_analyzer_t::correlation_high_low4(const Tins::IPv4Address &high_rate_ip_address,
+                                                    const Tins::IPv4Address &low_rate_ip_address) {
+
+
+    /**
+     * Adjust the number of bits, then compute the correlation.
+     */
+
+    // Adjust number of bits
+
+    auto & packets_high_rate_interface = packets_per_interface4[high_rate_ip_address];
+    auto & packets_low_rate_interface  = packets_per_interface4[low_rate_ip_address];
+
+    auto n_bits = static_cast<int>(std::round(static_cast<double>(packets_high_rate_interface.size()) / packets_low_rate_interface.size()));
+
+
+    std::vector<int> int_bits_high;
+    std::vector<int> int_bits_low;
+
+    // Transform low rate time series to replace 1's by n_bits
+    std::transform(packets_low_rate_interface.begin(), packets_low_rate_interface.end(), std::back_inserter(int_bits_low),
+    [n_bits](const auto & responsiveness_packet){
+        if (responsiveness_packet.first){
+            return n_bits;
+        }
+        return 0;
+    });
+
+    std::transform(packets_high_rate_interface.begin(), packets_high_rate_interface.end(), std::back_inserter(int_bits_high),
+    [](const auto & responsiveness_packet){
+        if (responsiveness_packet.first){
+            return 1;
+        }
+        return 0;
+    });
+
+    std::vector<int> subsequences_high_rate;
+
+    for (int i = 0; i + n_bits < int_bits_high.size(); i += n_bits){
+        // Build subsequences of n_bits
+        auto sum_bits = std::accumulate(int_bits_high.begin() + i, int_bits_high.begin() + i + n_bits, 0);
+        subsequences_high_rate.push_back(sum_bits);
+    }
+
+    auto min_size = std::min(subsequences_high_rate.size(), int_bits_low.size());
+
+    subsequences_high_rate.resize(min_size);
+    int_bits_low.resize(min_size);
+
+    // Compute correlation
+    auto correlation = cov_correlation(subsequences_high_rate, int_bits_low).second;
+
+
+    return correlation;
 }
 
 

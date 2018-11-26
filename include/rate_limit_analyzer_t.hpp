@@ -95,6 +95,12 @@ public:
                         const Tins::IPv6Address &ip_address2);
 
 
+    double correlation_high_low4(const Tins::IPv4Address &ip_address1,
+                                const Tins::IPv4Address &ip_address2);
+
+
+    double correlation_high_low6(const Tins::IPv4Address &ip_address1,
+                                 const Tins::IPv4Address &ip_address2);
 
 
     void dump_loss_rate();
@@ -106,6 +112,7 @@ public:
     
     std::string serialize_raw4(const Tins::IPv4Address &);
     std::string serialize_raw6(const Tins::IPv4Address &);
+
 
 
     utils::probing_style_t get_probing_style() const;
@@ -144,9 +151,11 @@ private:
 
 
     responsiveness_t<Tins::IPv4Address> packets_per_interface4;
+
     responsiveness_t<Tins::IPv6Address> packets_per_interface6;
     std::vector<Tins::Packet> outgoing_packets;
     std::vector<Tins::Packet> icmp_replies;
+
 
 
 };

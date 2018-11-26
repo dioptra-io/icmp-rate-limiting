@@ -80,8 +80,28 @@ void rate_limit_group_t::execute_group_probes4(const std::vector<probe_infos_t> 
 
     for (const auto & id_group: groups){
         const auto & group = id_group.second;
-        for (const auto probing_rate : probing_rates){
-            execute_group_probes4(sniff_interface, group, probing_rate, group_type, output_dir_group);
+        for (auto probing_rate : probing_rates){
+
+            probing_rate = compute_probing_rate(probing_rate, group);
+
+            if (group_type == "GROUPDPR") {
+                // Group probing different rate
+                // Select the rate so the sum of the group is lower than the individual triggering rate.
+                auto ratio_rate = compute_rate_factor_dpr(probing_rate, static_cast<int>(probes_infos.size()));
+                // Change the rate of 1 candidate by ratio_rate
+                group_t group_different_rates(group.begin(), group.end());
+                for (auto &probe_infos: group_different_rates) {
+                    if (probe_infos.get_interface_type() == interface_type_t::CANDIDATE) {
+                        probe_infos.set_probing_rate(ratio_rate);
+                        break;
+                    }
+                }
+                execute_group_probes4(sniff_interface, group_different_rates, probing_rate, group_type, output_dir_group);
+            }
+            else {
+                execute_group_probes4(sniff_interface, group, probing_rate, group_type, output_dir_group);
+            }
+
             std::this_thread::sleep_for(std::chrono::seconds(5));
         }
 
@@ -124,8 +144,6 @@ std::stringstream rate_limit_group_t::analyse_group_probes4(
 
     std::unordered_map<std::pair<IPv4Address, IPv4Address>, double, pairhash> correlations;
 
-    // Per ip correlation
-    std::unordered_map<IPv4Address, double> correlations_map;
     // Extract correlation
 
     if (group_type == "GROUPSPR") {
@@ -143,6 +161,17 @@ std::stringstream rate_limit_group_t::analyse_group_probes4(
 
     }
 
+    else if (group_type == "GROUPDPR"){
+        // First candidate is the high rate one
+        auto ip_address_high_rate = group[0].get_real_target4();
+        for (int i = 1; i < group.size(); ++i) {
+            auto ip_address_i = group[i].get_real_target4();
+            auto correlation = rate_limit_analyzer.correlation_high_low4(ip_address_high_rate, ip_address_i);
+            correlations[std::make_pair(ip_address_high_rate, ip_address_i)] = correlation;
+            correlations[std::make_pair(ip_address_i, ip_address_high_rate)] = correlation;
+        }
+    }
+
     // Now extract per interface infos.
     for (const auto &probe_info : group) {
         auto real_target = probe_info.get_real_target4();
@@ -156,7 +185,8 @@ std::stringstream rate_limit_group_t::analyse_group_probes4(
         auto transition_matrix = rate_limit_analyzer.compute_loss_model4(real_target);
 
         // Extract the relevant correlations
-
+        // Per ip correlation
+        std::unordered_map<IPv4Address, double> correlations_map;
         for (const auto &correlation : correlations) {
             auto address1 = correlation.first.first;
             auto address2 = correlation.first.second;
@@ -209,7 +239,10 @@ std::stringstream rate_limit_group_t::analyse_group_probes4(
 
 
     for (const auto & group : groups){
-        for (const auto probing_rate : probing_rates){
+        for (auto probing_rate : probing_rates){
+
+            probing_rate = compute_probing_rate(probing_rate, group.second);
+
             try{
                 ostream << analyse_group_probes4(group.second, probing_rate, group_type, output_dir_group).str();
             } catch (const pcap_error & e){
@@ -276,8 +309,27 @@ void rate_limit_group_t::execute_group_probes6(const std::vector<probe_infos_t> 
 
     for (const auto & id_group: groups){
         const auto & group = id_group.second;
-        for (const auto probing_rate : probing_rates){
-            execute_group_probes6(sniff_interface, group, probing_rate, group_type, output_dir_group);
+        for (auto probing_rate : probing_rates){
+
+            probing_rate = compute_probing_rate(probing_rate, group);
+
+            if (group_type == "GROUPDPR") {
+                // Group probing different rate
+                // Select the rate so the sum of the group is lower than the individual triggering rate.
+                auto ratio_rate = compute_rate_factor_dpr(probing_rate, static_cast<int>(probes_infos.size()));
+                // Change the rate of 1 candidate by ratio_rate
+                group_t group_different_rates(group.begin(), group.end());
+                for (auto &probe_infos: group_different_rates) {
+                    if (probe_infos.get_interface_type() == interface_type_t::CANDIDATE) {
+                        probe_infos.set_probing_rate(ratio_rate);
+                        break;
+                    }
+                }
+                execute_group_probes6(sniff_interface, group_different_rates, probing_rate, group_type, output_dir_group);
+            }
+            else {
+                execute_group_probes6(sniff_interface, group, probing_rate, group_type, output_dir_group);
+            }
             std::this_thread::sleep_for(std::chrono::seconds(5));
         }
 
@@ -405,7 +457,9 @@ std::stringstream rate_limit_group_t::analyse_group_probes6(
 
 
     for (const auto & group : groups){
-        for (const auto probing_rate : probing_rates){
+        for (auto probing_rate : probing_rates){
+
+            probing_rate = compute_probing_rate(probing_rate, group.second);
             try{
                 ostream << analyse_group_probes6(group.second, probing_rate, group_type, output_dir_group).str();
             } catch (const pcap_error & e){
@@ -416,4 +470,47 @@ std::stringstream rate_limit_group_t::analyse_group_probes6(
 
     }
     return ostream;
+}
+
+
+int rate_limit_group_t::compute_rate_factor_dpr(int probing_rate, int ip_n){
+
+    // TODO Make this variable according to the individual probing phase.
+    // In 99% of the case, the triggering rate is between 1000 and 2000,
+    // so taking 1500 * offset_security is sufficient
+    auto triggering_rate_threshold = 1500;
+
+    auto low_rate = triggering_rate_threshold / ip_n;
+
+    auto remaining_rate = probing_rate;
+
+    auto rate_factor = static_cast<int>(remaining_rate / low_rate);
+
+
+    rate_factor = std::max(rate_factor, 2);
+
+    return rate_factor;
+
+}
+
+int rate_limit_group_t::compute_probing_rate(int base_probing_rate, const std::vector<probe_infos_t> & group) {
+
+    // Count the number of candidates and the number of witnesses
+
+    auto n_candidates = 0;
+    auto n_witnesses = 0;
+
+    for (const auto & probe_infos : group){
+        if (probe_infos.get_interface_type() == interface_type_t::CANDIDATE){
+            n_candidates += 1;
+        }
+        else if (probe_infos.get_interface_type() == interface_type_t::WITNESS){
+            n_witnesses += 1;
+        }
+    }
+
+    // Assuming that the witness is not alias with any of the candidate
+    auto probing_rate = static_cast<int>(base_probing_rate + (static_cast<double>(n_witnesses) / n_candidates) * base_probing_rate);
+
+    return probing_rate;
 }

@@ -79,19 +79,17 @@ std::stringstream rate_limit_individual_t::analyse_individual_probes4(
     // Now extract relevant infos.
     auto triggering_rates_per_ip = rate_limit_analyzer.compute_icmp_triggering_rate4();
     auto transition_matrix_per_ip = rate_limit_analyzer.compute_loss_model4(real_target);
-    if (triggering_rates_per_ip.at(real_target) != std::make_pair(-1, -1)) {
-        auto change_behaviour_rate = triggering_rates_per_ip[real_target].first;
+    auto change_behaviour_moment = triggering_rates_per_ip[real_target].first;
 
-        auto line_ostream = build_output_line(
-                probe_infos.get_real_target4(),
-                "INDIVIDUAL",
-                probing_rate,
-                change_behaviour_rate,
-                loss_rate,
-                transition_matrix_per_ip.transition(0,0), transition_matrix_per_ip.transition(0,1), transition_matrix_per_ip.transition(1,0), transition_matrix_per_ip.transition(1,1),
-                std::unordered_map<IPv4Address, double>());
-        ostream << line_ostream.str();
-    }
+    auto line_ostream = build_output_line(
+            probe_infos.get_real_target4(),
+            "INDIVIDUAL",
+            probing_rate,
+            change_behaviour_moment,
+            loss_rate,
+            transition_matrix_per_ip.transition(0,0), transition_matrix_per_ip.transition(0,1), transition_matrix_per_ip.transition(1,0), transition_matrix_per_ip.transition(1,1),
+            std::unordered_map<IPv4Address, double>());
+    ostream << line_ostream.str();
     return ostream;
 }
 
@@ -189,19 +187,18 @@ std::stringstream rate_limit_individual_t::analyse_individual_probes6(
     // Now extract relevant infos.
     auto triggering_rates_per_ip = rate_limit_analyzer.compute_icmp_triggering_rate6();
     auto transition_matrix_per_ip = rate_limit_analyzer.compute_loss_model6(real_target);
-    if (triggering_rates_per_ip.at(real_target) != std::make_pair(-1, -1)) {
-        auto change_behaviour_rate = triggering_rates_per_ip[real_target].first;
+    auto change_behaviour_moment = triggering_rates_per_ip[real_target].first;
 
-        auto line_ostream = build_output_line(
-                probe_infos.get_real_target6(),
-                "INDIVIDUAL",
-                probing_rate,
-                change_behaviour_rate,
-                loss_rate,
-                transition_matrix_per_ip.transition(0,0), transition_matrix_per_ip.transition(0,1), transition_matrix_per_ip.transition(1,0), transition_matrix_per_ip.transition(1,1),
-                std::unordered_map<IPv6Address, double>());
-        ostream << line_ostream.str();
-    }
+    auto line_ostream = build_output_line(
+            probe_infos.get_real_target6(),
+            "INDIVIDUAL",
+            probing_rate,
+            change_behaviour_moment,
+            loss_rate,
+            transition_matrix_per_ip.transition(0,0), transition_matrix_per_ip.transition(0,1), transition_matrix_per_ip.transition(1,0), transition_matrix_per_ip.transition(1,1),
+            std::unordered_map<IPv6Address, double>());
+    ostream << line_ostream.str();
+
     return ostream;
 }
 

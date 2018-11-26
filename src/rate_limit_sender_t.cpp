@@ -127,7 +127,8 @@ void rate_limit_sender_t::start() {
             //TODO Only ICMPv6 is supported
             auto icmp = probe_to_send.find_pdu<ICMPv6>();
             if (icmp != nullptr){
-                icmp->identifier(ip_id);
+                icmp->identifier(1);
+                icmp->sequence(ip_id);
             }
             sender.send(probe_to_send);
             wait_loop(interval);

@@ -28,8 +28,7 @@ using namespace Tins;
 using namespace utils;
 namespace {
 
-    std::vector<int> custom_rates {500, 1000, 2000, 3000};
-    std::vector<int> custom_group_rates {1500, 3000, 6000, 9000};
+    std::vector<int> custom_rates {3000, 4000, 5000};
 
     // The format of the input file should be the following:
     // GROUP_ID, ADDRESS_FAMILY, PROBING_TYPE (DIRECT, INDIRECT), PROTOCOL (tcp, udp, icmp), INTERFACE_TYPE (CANDIDATE, WITNESS),
@@ -181,14 +180,6 @@ namespace {
         }
         return probes_infos;
     }
-
-    int compute_rate(int ip_n){
-        auto rate = ip_n;
-        if (rate < 8){
-            rate = 8;
-        }
-        return rate;
-    }
 }
 
 
@@ -221,6 +212,7 @@ int main(int argc, char * argv[]){
     bool analyse_only = false;
     bool probe_only = false;
     bool group_only = false;
+    bool individual_only = false;
     auto targets_file_path = std::string("");
     std::string pcap_dir_individual {"resources/pcap/individual/"};
     std::string pcap_dir_groups {"resources/pcap/groups/"};
@@ -236,6 +228,7 @@ int main(int argc, char * argv[]){
             ("pcap-group-dir,g", po::value<std::string>(), "directory for group probing pcap files")
             ("output-file,o", po::value<std::string>(), "output file of the analysis")
             ("group-only,G", "only do group probing")
+            ("individual-only,I", "only do individual probing")
             ("analyse-only,a", "do not probe, only start analysis")
             ("probe-only,p", "do not analyse, only probe");
 
@@ -278,15 +271,23 @@ int main(int argc, char * argv[]){
         std::cout << "output file set to  "
                   << output_file<< "\n";
     }
+
+    if (vm.count("individual-only")){
+        individual_only = true;
+        std::cout << "Only individual probing will be done.\n";
+    }
+
     if (vm.count("group-only")){
         group_only = true;
         std::cout << "Only group probing will be done.\n";
     }
     if (vm.count("analyse-only")) {
         analyse_only = true;
+        std::cout << "Only analyse will be done.\n";
     }
     if (vm.count("probe-only")) {
         probe_only = true;
+        std::cout << "Only probing will be done.\n";
     }
 
 
@@ -311,6 +312,7 @@ int main(int argc, char * argv[]){
      * Initialize output stream
      */
 
+
     std::stringstream ostream;
 
     if (probes_infos[0].get_family() == PDU::PDUType::IP){
@@ -325,21 +327,14 @@ int main(int argc, char * argv[]){
                 rate_limit_individual.execute_individual_probes4(probes_infos, custom_rates, pcap_dir_individual);
             }
 
-            // Group probing same rate
-            std::cout << "Proceeding to probing groups phase with same probing rate\n";
-            rate_limit_group.execute_group_probes4(probes_infos, custom_group_rates, "GROUPSPR", pcap_dir_groups);
-            std::cout << "Proceeding to probing groups phase with different probing rate\n";
-            // Group probing different rate
-            auto ratio_rate = compute_rate(static_cast<int>(probes_infos.size()));
-            // Change the rate of 1 candidate by ratio_rate
-            std::vector<probe_infos_t> probes_infos_different_rates (probes_infos.begin(), probes_infos.end());
-            for (auto & probe_infos: probes_infos_different_rates){
-                if (probe_infos.get_interface_type() == interface_type_t::CANDIDATE){
-                    probe_infos.set_probing_rate(ratio_rate);
-                    break;
-                }
+            if (!individual_only){
+                // Group probing same rate
+                std::cout << "Proceeding to probing groups phase with same probing rate\n";
+                rate_limit_group.execute_group_probes4(probes_infos, custom_rates, "GROUPSPR", pcap_dir_groups);
+                std::cout << "Proceeding to probing groups phase with different probing rate\n";
+                rate_limit_group_dpr.execute_group_probes4(probes_infos, custom_rates, "GROUPDPR", pcap_dir_groups);
             }
-            rate_limit_group_dpr.execute_group_probes4(probes_infos_different_rates, custom_group_rates, "GROUPDPR", pcap_dir_groups);
+
         }
         // Analysis
         if(!probe_only){
@@ -347,12 +342,15 @@ int main(int argc, char * argv[]){
                 auto individual_ostream = rate_limit_individual.analyse_individual_probes4(probes_infos, custom_rates, pcap_dir_individual);
                 ostream << individual_ostream.str();
             }
-            auto group_spr_ostream = rate_limit_group.analyse_group_probes4(probes_infos, custom_group_rates, "GROUPSPR", pcap_dir_groups);
-            ostream << group_spr_ostream.str();
-            auto group_dpr_ostream = rate_limit_group_dpr.analyse_group_probes4(probes_infos, custom_group_rates, "GROUPDPR", pcap_dir_groups);
-            ostream << group_dpr_ostream.str();
-            std::ofstream outfile (output_file);
-            outfile << ostream.str() << "\n";
+            if (!individual_only){
+                auto group_spr_ostream = rate_limit_group.analyse_group_probes4(probes_infos, custom_rates, "GROUPSPR", pcap_dir_groups);
+                ostream << group_spr_ostream.str();
+                auto group_dpr_ostream = rate_limit_group_dpr.analyse_group_probes4(probes_infos, custom_rates, "GROUPDPR", pcap_dir_groups);
+                ostream << group_dpr_ostream.str();
+                std::ofstream outfile (output_file);
+                outfile << ostream.str() << "\n";
+            }
+
         }
 
 
@@ -365,21 +363,17 @@ int main(int argc, char * argv[]){
                 std::cout << "Proceeding to probing individual phase with same probing rate\n";
                 rate_limit_individual.execute_individual_probes6(probes_infos, custom_rates, pcap_dir_individual);
             }
-            // Group probing same rate
-            std::cout << "Proceeding to probing groups phase with same probing rate\n";
-            rate_limit_group.execute_group_probes6(probes_infos, custom_group_rates, "GROUPSPR", pcap_dir_groups);
-            std::cout << "Proceeding to probing groups phase with different probing rate\n";
-            // Group probing different rate
-            auto ratio_rate = compute_rate(static_cast<int>(probes_infos.size()));
-            // Change the rate of 1 candidate by ratio_rate
-            std::vector<probe_infos_t> probes_infos_different_rates (probes_infos.begin(), probes_infos.end());
-            for (auto & probe_infos: probes_infos_different_rates){
-                if (probe_infos.get_interface_type() == interface_type_t::CANDIDATE){
-                    probe_infos.set_probing_rate(ratio_rate);
-                    break;
-                }
+
+            if(!individual_only){
+                // Group probing same rate
+                std::cout << "Proceeding to probing groups phase with same probing rate\n";
+                rate_limit_group.execute_group_probes6(probes_infos, custom_rates, "GROUPSPR", pcap_dir_groups);
+                std::cout << "Proceeding to probing groups phase with different probing rate\n";
+                rate_limit_group_dpr.execute_group_probes6(probes_infos, custom_rates, "GROUPDPR", pcap_dir_groups);
             }
-            rate_limit_group_dpr.execute_group_probes6(probes_infos_different_rates, custom_group_rates, "GROUPDPR", pcap_dir_groups);
+
+
+
         }
         // Analysis
         if(!probe_only){
@@ -388,12 +382,15 @@ int main(int argc, char * argv[]){
                 ostream << individual_ostream.str();
             }
 
-            auto group_spr_ostream = rate_limit_group.analyse_group_probes6(probes_infos, custom_group_rates, "GROUPSPR", pcap_dir_groups);
-            ostream << group_spr_ostream.str();
-            auto group_dpr_ostream = rate_limit_group_dpr.analyse_group_probes6(probes_infos, custom_group_rates, "GROUPDPR", pcap_dir_groups);
-            ostream << group_dpr_ostream.str();
-            std::ofstream outfile (output_file);
-            outfile << ostream.str() << "\n";
+            if (!individual_only){
+                auto group_spr_ostream = rate_limit_group.analyse_group_probes6(probes_infos, custom_rates, "GROUPSPR", pcap_dir_groups);
+                ostream << group_spr_ostream.str();
+                auto group_dpr_ostream = rate_limit_group_dpr.analyse_group_probes6(probes_infos, custom_rates, "GROUPDPR", pcap_dir_groups);
+                ostream << group_dpr_ostream.str();
+                std::ofstream outfile (output_file);
+                outfile << ostream.str() << "\n";
+            }
+
         }
     }
 

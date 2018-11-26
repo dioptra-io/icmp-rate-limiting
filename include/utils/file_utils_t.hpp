@@ -31,12 +31,12 @@ namespace utils{
                                         double transition_matrix_0_1,
                                         double transition_matrix_1_0,
                                         double transition_matrix_1_1,
-                                        const std::unordered_map<Address, double> correlations){
+                                        const std::unordered_map<Address, double> & correlations){
 
         std::stringstream ostream;
         ostream << address << ", " << type << ", " << probing_rate << ", " <<  change_behaviour_rate << ", " << loss_rate <<", ";
         ostream << transition_matrix_0_0 << ", "  << transition_matrix_0_1  << ", " << transition_matrix_1_0 << ", " << transition_matrix_1_1;
-        if (type == std::string("GROUPSPR")){
+        if (type == std::string("GROUPSPR") || type == std::string("GROUPDPR")){
             for (const auto & correlation_address : correlations){
                 ostream << ", " << correlation_address.first << ": " << correlation_address.second;
             }

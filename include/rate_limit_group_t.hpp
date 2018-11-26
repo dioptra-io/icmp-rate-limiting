@@ -60,6 +60,12 @@ public:
             const std::vector<int> & probing_rates,
             const std::string & group_type,
             const std::string & output_dir_group);
+
+
+private:
+
+    int compute_rate_factor_dpr(int probing_rate, int n_ip);
+    int compute_probing_rate(int base_probing_rate, const std::vector<probe_infos_t> & groups);
 };
 
 
