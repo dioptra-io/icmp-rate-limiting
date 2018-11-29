@@ -11,9 +11,21 @@
 #include <cmath>
 
 
+#include <RInside.h>                    // for the embedded R via RInside
+
+
 using namespace Tins;
 
 using namespace utils;
+
+// Create the R context
+RInside R_context;
+// Load R libraries
+auto load_R_libraries = std::string("library(changepoint);"
+                                    "library(changepoint.np);");
+
+bool already_loaded = false;
+
 
 rate_limit_analyzer_t::rate_limit_analyzer_t(probing_style_t probing_style, PDU::PDUType family) :
         ip_family(family),
@@ -568,71 +580,98 @@ gilbert_elliot_t rate_limit_analyzer_t::compute_loss_model6(const Tins::IPv6Addr
     return compute_loss_model(packets_per_interface6.at(address));
 }
 
-packet_interval_t rate_limit_analyzer_t::compute_icmp_triggering_rate(
+int rate_limit_analyzer_t::compute_icmp_change_point(
         const std::vector<responsive_info_probe_t> &data) const {
-    double global_loss_rate_treshold = 0.12;
-    double loss_rate_treshold = 0.2;
-    int interval_length = 100;
+//    double global_loss_rate_treshold = 0.12;
+//    double loss_rate_treshold = 0.2;
+//    int interval_length = 100;
+//
+//    int triggering_loss_rate = -1;
+//
+//    auto global_loss_rate = compute_loss_rate(data);
+//    if (global_loss_rate > global_loss_rate_treshold) {
+//        for (int i = 0; i < data.size() - interval_length; i += interval_length / 2) {
+//            decltype(data.begin()) last_index;
+//            if ((i + 2 * interval_length) < data.size()) {
+//                last_index = data.begin() + i + interval_length;
+//            } else {
+//                break;
+//            }
+//
+//            std::vector<responsive_info_probe_t> responsiveness_interval(data.begin() + i, last_index);
+//            auto loss_rate_interval = compute_loss_rate(responsiveness_interval);
+//
+//            if (loss_rate_interval > loss_rate_treshold) {
+//                triggering_loss_rate = i;
+//                break;
+//            }
+//        }
+//    }
+//    if (triggering_loss_rate == -1){
+//        return std::make_pair(triggering_loss_rate, triggering_loss_rate);
+//    }
+//    return std::make_pair(triggering_loss_rate, triggering_loss_rate + interval_length);
 
-    int triggering_loss_rate = -1;
-
-    auto global_loss_rate = compute_loss_rate(data);
-    if (global_loss_rate > global_loss_rate_treshold) {
-        for (int i = 0; i < data.size() - interval_length; i += interval_length / 2) {
-            decltype(data.begin()) last_index;
-            if ((i + 2 * interval_length) < data.size()) {
-                last_index = data.begin() + i + interval_length;
-            } else {
-                break;
-            }
-
-            std::vector<responsive_info_probe_t> responsiveness_interval(data.begin() + i, last_index);
-            auto loss_rate_interval = compute_loss_rate(responsiveness_interval);
-
-            if (loss_rate_interval > loss_rate_treshold) {
-                triggering_loss_rate = i;
-                break;
-            }
-        }
+    // Create the R context
+    if (!already_loaded){
+        R_context.parseEvalQ(load_R_libraries);
+        already_loaded = true;
     }
-    if (triggering_loss_rate == -1){
-        return std::make_pair(triggering_loss_rate, triggering_loss_rate);
+
+
+    // Change to binary responses
+    auto binary_responses = responsiveness_to_binary(data);
+
+    R_context["data"] = binary_responses;
+
+    auto run_change_point_algorithm = std::string("data.man=cpt.meanvar(data,method='PELT',penalty='MBIC')");
+
+    R_context.parseEvalQ(run_change_point_algorithm);
+
+    Rcpp::NumericVector change_point_R = R_context.parseEval("cpts(data.man)");
+
+    int change_point = change_point_R[0];
+
+    if (change_point == 0){
+        return static_cast<int>(data.size());
     }
-    return std::make_pair(triggering_loss_rate, triggering_loss_rate + interval_length);
+
+    return change_point;
+
 }
 
-std::unordered_map<IPv4Address, packet_interval_t>
-rate_limit_analyzer_t::compute_icmp_triggering_rate4() const {
-    std::unordered_map<IPv4Address, packet_interval_t> icmp_triggering_rate;
+std::unordered_map<IPv4Address, int>
+rate_limit_analyzer_t::compute_icmp_change_point4() const {
+    std::unordered_map<IPv4Address, int> icmp_change_point;
     for (const auto & responsiveness_ip : packets_per_interface4){
-        auto triggering_rate = compute_icmp_triggering_rate(responsiveness_ip.second);
-        icmp_triggering_rate[responsiveness_ip.first] = triggering_rate;
+        auto change_point = compute_icmp_change_point(responsiveness_ip.second);
+        icmp_change_point[responsiveness_ip.first] = change_point;
     }
-    return icmp_triggering_rate;
+    return icmp_change_point;
 }
 
-packet_interval_t
-rate_limit_analyzer_t::compute_icmp_triggering_rate4(const IPv4Address & ip_address) const {
+int
+rate_limit_analyzer_t::compute_icmp_change_point4(const IPv4Address &ip_address) const {
     auto raw = packets_per_interface4.at(ip_address);
-    auto triggering_rate = compute_icmp_triggering_rate(raw);
-    return triggering_rate;
+    auto change_point = compute_icmp_change_point(raw);
+    return change_point;
 }
 
-std::unordered_map<IPv6Address, packet_interval_t>
-rate_limit_analyzer_t::compute_icmp_triggering_rate6() const {
-    std::unordered_map<IPv6Address, packet_interval_t> icmp_triggering_rate;
+std::unordered_map<IPv6Address, int>
+rate_limit_analyzer_t::compute_icmp_change_point6() const {
+    std::unordered_map<IPv6Address, int> icmp_change_poiint;
     for (const auto & responsiveness_ip : packets_per_interface6){
-        auto triggering_rate = compute_icmp_triggering_rate(responsiveness_ip.second);
-        icmp_triggering_rate[responsiveness_ip.first] = triggering_rate;
+        auto triggering_rate = compute_icmp_change_point(responsiveness_ip.second);
+        icmp_change_poiint[responsiveness_ip.first] = triggering_rate;
     }
-    return icmp_triggering_rate;
+    return icmp_change_poiint;
 }
 
-packet_interval_t
-rate_limit_analyzer_t::compute_icmp_triggering_rate6(const IPv6Address & ip_address) const {
+int
+rate_limit_analyzer_t::compute_icmp_change_point6(const IPv6Address &ip_address) const {
     std::unordered_map<IPv4Address, packet_interval_t> icmp_triggering_rate;
     auto raw = packets_per_interface6.at(ip_address);
-    auto triggering_rate = compute_icmp_triggering_rate(raw);
+    auto triggering_rate = compute_icmp_change_point(raw);
     return triggering_rate;
 }
 
@@ -748,6 +787,77 @@ double rate_limit_analyzer_t::correlation_high_low4(const Tins::IPv4Address &hig
         }
         return 0;
     });
+
+    std::vector<int> subsequences_high_rate;
+
+    for (int i = 0; i + n_bits < int_bits_high.size(); i += n_bits){
+        // Build subsequences of n_bits
+        auto sum_bits = std::accumulate(int_bits_high.begin() + i, int_bits_high.begin() + i + n_bits, 0);
+        subsequences_high_rate.push_back(sum_bits);
+    }
+
+    auto min_size = std::min(subsequences_high_rate.size(), int_bits_low.size());
+
+    subsequences_high_rate.resize(min_size);
+    int_bits_low.resize(min_size);
+
+    // Compute correlation
+    auto correlation = cov_correlation(subsequences_high_rate, int_bits_low).second;
+
+
+    return correlation;
+}
+
+std::vector<int>
+rate_limit_analyzer_t::responsiveness_to_binary(const std::vector<utils::responsive_info_probe_t> &responses) const{
+
+    std::vector<int> binary_responses;
+
+    std::transform(responses.begin(), responses.end(), std::back_inserter(binary_responses),
+                   [](const auto & responsiveness_packet){
+                       if (responsiveness_packet.first){
+                           return 1;
+                       }
+                       return 0;
+                   });
+    return binary_responses;
+}
+
+double rate_limit_analyzer_t::correlation_high_low6(const Tins::IPv6Address &high_rate_ip_address,
+                                                    const Tins::IPv6Address &low_rate_ip_address) {
+
+
+    /**
+     * Adjust the number of bits, then compute the correlation.
+     */
+
+    // Adjust number of bits
+
+    auto & packets_high_rate_interface = packets_per_interface6[high_rate_ip_address];
+    auto & packets_low_rate_interface  = packets_per_interface6[low_rate_ip_address];
+
+    auto n_bits = static_cast<int>(std::round(static_cast<double>(packets_high_rate_interface.size()) / packets_low_rate_interface.size()));
+
+
+    std::vector<int> int_bits_high;
+    std::vector<int> int_bits_low;
+
+    // Transform low rate time series to replace 1's by n_bits
+    std::transform(packets_low_rate_interface.begin(), packets_low_rate_interface.end(), std::back_inserter(int_bits_low),
+                   [n_bits](const auto & responsiveness_packet){
+                       if (responsiveness_packet.first){
+                           return n_bits;
+                       }
+                       return 0;
+                   });
+
+    std::transform(packets_high_rate_interface.begin(), packets_high_rate_interface.end(), std::back_inserter(int_bits_high),
+                   [](const auto & responsiveness_packet){
+                       if (responsiveness_packet.first){
+                           return 1;
+                       }
+                       return 0;
+                   });
 
     std::vector<int> subsequences_high_rate;
 

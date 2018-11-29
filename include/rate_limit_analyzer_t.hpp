@@ -72,13 +72,13 @@ public:
      * Compute the changing behaviour moment of a time serie
      * @return
      */
-    std::unordered_map<Tins::IPv4Address, utils::packet_interval_t> compute_icmp_triggering_rate4() const;
+    std::unordered_map<Tins::IPv4Address, int> compute_icmp_change_point4() const;
 
-    std::unordered_map<Tins::IPv6Address, utils::packet_interval_t> compute_icmp_triggering_rate6() const;
+    std::unordered_map<Tins::IPv6Address, int> compute_icmp_change_point6() const;
 
-    utils::packet_interval_t compute_icmp_triggering_rate4(const Tins::IPv4Address &) const;
+    int compute_icmp_change_point4(const Tins::IPv4Address &) const;
 
-    utils::packet_interval_t compute_icmp_triggering_rate6(const Tins::IPv6Address &) const;
+    int compute_icmp_change_point6(const Tins::IPv6Address &) const;
 
 
     /**
@@ -99,8 +99,8 @@ public:
                                 const Tins::IPv4Address &ip_address2);
 
 
-    double correlation_high_low6(const Tins::IPv4Address &ip_address1,
-                                 const Tins::IPv4Address &ip_address2);
+    double correlation_high_low6(const Tins::IPv6Address &ip_address1,
+                                 const Tins::IPv6Address &ip_address2);
 
 
     void dump_loss_rate();
@@ -114,6 +114,8 @@ public:
     std::string serialize_raw6(const Tins::IPv4Address &);
 
 
+
+    std::vector<int> responsiveness_to_binary(const std::vector<utils::responsive_info_probe_t> & responses) const ;
 
     utils::probing_style_t get_probing_style() const;
     std::vector<utils::responsive_info_probe_t> get_raw_packets4(const Tins::IPv4Address &ip) const;
@@ -138,7 +140,7 @@ private:
 
     void dump_transition_matrix(const gilbert_elliot_t & loss_model);
     void sort_by_timestamp(std::vector<Tins::Packet> &packets);
-    utils::packet_interval_t compute_icmp_triggering_rate(const std::vector<utils::responsive_info_probe_t> & data) const;
+    int compute_icmp_change_point(const std::vector<utils::responsive_info_probe_t> &data) const;
 
 
 //    std::vector<intervals_t> compute_responsiveness();

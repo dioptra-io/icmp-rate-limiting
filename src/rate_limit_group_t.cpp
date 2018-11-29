@@ -179,7 +179,7 @@ std::stringstream rate_limit_group_t::analyse_group_probes4(
         std::cout << probe_info.get_real_target4() << " loss rate: " << loss_rate << "\n";
 
         // Changing behaviour time
-        auto changing_behaviour_time = rate_limit_analyzer.compute_icmp_triggering_rate4(real_target);
+        auto change_point = rate_limit_analyzer.compute_icmp_change_point4(real_target);
 
         // Transition matrices
         auto transition_matrix = rate_limit_analyzer.compute_loss_model4(real_target);
@@ -201,7 +201,7 @@ std::stringstream rate_limit_group_t::analyse_group_probes4(
                 real_target,
                 group_type,
                 probing_rate,
-                changing_behaviour_time.first,
+                change_point,
                 loss_rate,
                 transition_matrix.transition(0,0),
                 transition_matrix.transition(0,1),
@@ -372,8 +372,6 @@ std::stringstream rate_limit_group_t::analyse_group_probes6(
 
     std::unordered_map<std::pair<IPv6Address, IPv6Address>, double, pairhash> correlations;
 
-    // Per ip correlation
-    std::unordered_map<IPv6Address, double> correlations_map;
     // Extract correlation
 
     if (group_type == "GROUPSPR") {
@@ -391,6 +389,17 @@ std::stringstream rate_limit_group_t::analyse_group_probes6(
 
     }
 
+    else if (group_type == "GROUPDPR"){
+        // First candidate is the high rate one
+        auto ip_address_high_rate = group[0].get_real_target6();
+        for (int i = 1; i < group.size(); ++i) {
+            auto ip_address_i = group[i].get_real_target6();
+            auto correlation = rate_limit_analyzer.correlation_high_low6(ip_address_high_rate, ip_address_i);
+            correlations[std::make_pair(ip_address_high_rate, ip_address_i)] = correlation;
+            correlations[std::make_pair(ip_address_i, ip_address_high_rate)] = correlation;
+        }
+    }
+
     // Now extract per interface infos.
     for (const auto &probe_info : group) {
         auto real_target = probe_info.get_real_target6();
@@ -398,13 +407,14 @@ std::stringstream rate_limit_group_t::analyse_group_probes6(
         std::cout << probe_info.get_real_target6() << " loss rate: " << loss_rate << "\n";
 
         // Changing behaviour time
-        auto changing_behaviour_time = rate_limit_analyzer.compute_icmp_triggering_rate6(real_target);
+        auto change_point = rate_limit_analyzer.compute_icmp_change_point6(real_target);
 
         // Transition matrices
         auto transition_matrix = rate_limit_analyzer.compute_loss_model6(real_target);
 
         // Extract the relevant correlations
-
+        // Per ip correlation
+        std::unordered_map<IPv6Address, double> correlations_map;
         for (const auto &correlation : correlations) {
             auto address1 = correlation.first.first;
             auto address2 = correlation.first.second;
@@ -419,7 +429,7 @@ std::stringstream rate_limit_group_t::analyse_group_probes6(
                 real_target,
                 group_type,
                 probing_rate,
-                changing_behaviour_time.first,
+                change_point,
                 loss_rate,
                 transition_matrix.transition(0,0),
                 transition_matrix.transition(0,1),

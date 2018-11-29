@@ -216,6 +216,7 @@ int main(int argc, char * argv[]){
     auto targets_file_path = std::string("");
     std::string pcap_dir_individual {"resources/pcap/individual/"};
     std::string pcap_dir_groups {"resources/pcap/groups/"};
+    std::string pcap_prefix {""};
     std::string output_file;
 
     // Declare the supported options.
@@ -226,6 +227,7 @@ int main(int argc, char * argv[]){
                                                      "REAL_ADDRESS, PROBING_ADDRESS, FLOW_ID (v6), SRC_PORT(v4) , DST_PORT(v4)." )
             ("pcap-individual-dir,i", po::value<std::string>(), "directory for individual probing pcap files")
             ("pcap-group-dir,g", po::value<std::string>(), "directory for group probing pcap files")
+            ("pcap-prefix,x", po::value<std::string>(), "pcap_prefix of pcap files")
             ("output-file,o", po::value<std::string>(), "output file of the analysis")
             ("group-only,G", "only do group probing")
             ("individual-only,I", "only do individual probing")
@@ -264,6 +266,15 @@ int main(int argc, char * argv[]){
         pcap_dir_groups = vm["pcap-group-dir"].as<std::string>();
         std::cout << "pcap groups dir set to  "
                   << pcap_dir_groups << "\n";
+    }
+
+    if (vm.count("pcap-prefix")) {
+        pcap_prefix = vm["pcap-prefix"].as<std::string>();
+        std::cout << "pcap prefix dir set to  "
+                  << pcap_prefix << "\n";
+
+        pcap_dir_individual += pcap_prefix;
+        pcap_dir_groups += pcap_prefix;
     }
 
     if (vm.count("output-file")) {

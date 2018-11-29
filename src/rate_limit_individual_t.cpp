@@ -77,15 +77,14 @@ std::stringstream rate_limit_individual_t::analyse_individual_probes4(
     auto loss_rate = rate_limit_analyzer.compute_loss_rate(probe_infos.get_real_target4());
     std::cout << "Loss rate: " << loss_rate << "\n";
     // Now extract relevant infos.
-    auto triggering_rates_per_ip = rate_limit_analyzer.compute_icmp_triggering_rate4();
+    auto change_point = rate_limit_analyzer.compute_icmp_change_point4(real_target);
     auto transition_matrix_per_ip = rate_limit_analyzer.compute_loss_model4(real_target);
-    auto change_behaviour_moment = triggering_rates_per_ip[real_target].first;
 
     auto line_ostream = build_output_line(
             probe_infos.get_real_target4(),
             "INDIVIDUAL",
             probing_rate,
-            change_behaviour_moment,
+            change_point,
             loss_rate,
             transition_matrix_per_ip.transition(0,0), transition_matrix_per_ip.transition(0,1), transition_matrix_per_ip.transition(1,0), transition_matrix_per_ip.transition(1,1),
             std::unordered_map<IPv4Address, double>());
@@ -185,20 +184,18 @@ std::stringstream rate_limit_individual_t::analyse_individual_probes6(
     auto loss_rate = rate_limit_analyzer.compute_loss_rate(probe_infos.get_real_target6());
     std::cout << "Loss rate: " << loss_rate << "\n";
     // Now extract relevant infos.
-    auto triggering_rates_per_ip = rate_limit_analyzer.compute_icmp_triggering_rate6();
+    auto change_point = rate_limit_analyzer.compute_icmp_change_point6(real_target);
     auto transition_matrix_per_ip = rate_limit_analyzer.compute_loss_model6(real_target);
-    auto change_behaviour_moment = triggering_rates_per_ip[real_target].first;
 
     auto line_ostream = build_output_line(
             probe_infos.get_real_target6(),
             "INDIVIDUAL",
             probing_rate,
-            change_behaviour_moment,
+            change_point,
             loss_rate,
             transition_matrix_per_ip.transition(0,0), transition_matrix_per_ip.transition(0,1), transition_matrix_per_ip.transition(1,0), transition_matrix_per_ip.transition(1,1),
             std::unordered_map<IPv6Address, double>());
     ostream << line_ostream.str();
-
     return ostream;
 }
 
