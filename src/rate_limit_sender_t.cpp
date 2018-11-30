@@ -7,12 +7,15 @@
 #include <iostream>
 #include <algorithm>// std::random_shuffle
 #include <random>
-#include <rate_limit_sender_t.hpp>
+#include <unistd.h>
 
+#include <rate_limit_sender_t.hpp>
+#include <utils/maths_utils_t.hpp>
+
+using namespace utils;
 using namespace Tins;
 
 namespace{
-    int potential_alias_packets = 50;
 
     void wait_loop(int interval){
         bool sleep = true;
@@ -82,19 +85,66 @@ std::vector<IPv6> rate_limit_sender_t::build_probing_pattern6() {
 }
 
 void rate_limit_sender_t::start() {
-    // 1 packet / interval
+
+        // 1 packet / interval
     auto interval = 1000000/probing_rate;
+
     int probe_sent = 0;
 
+    std::vector<double> loop_overheads;
+
+    IP warmup_probe {NetworkInterface::default_interface().ipv4_address(), NetworkInterface::default_interface().ipv4_address()};
+    IPv6 warmup_probe6 {NetworkInterface::default_interface().ipv6_addresses()[0].address,
+                        NetworkInterface::default_interface().ipv6_addresses()[0].address};
+
+    // Warm up to compute the loop overhead of sending a packet
+    for (int i = 0; i < 2000; ++i) {
+
+        auto start_send_packet = std::chrono::high_resolution_clock::now();
+
+        if (candidates[0].get_family() == PDU::PDUType::IP){
+            auto probe_to_send = warmup_probe;
+            auto icmp = probe_to_send.find_pdu<ICMP>();
+            if (icmp != nullptr) {
+                icmp->id(1);
+                icmp->sequence(i);
+            } else {
+                probe_to_send.id(i);
+            }
+
+            sender.send(probe_to_send);
+        } else if (candidates[0].get_family() == PDU::PDUType::IPv6){
+            auto probe_to_send = warmup_probe6;
+            auto icmp = probe_to_send.find_pdu<ICMPv6>();
+            if (icmp != nullptr){
+                icmp->identifier(1);
+                icmp->sequence(i);
+            }
+            sender.send(probe_to_send);
+        }
+
+
+        auto end_send_packet = std::chrono::high_resolution_clock::now();
+        loop_overheads.push_back(std::chrono::duration<double, std::micro> (end_send_packet-start_send_packet).count());
+    }
+
+    // Adjust the sleep time according to the loop overhead
+    double loop_overhead = mean_stddev(loop_overheads.begin(), loop_overheads.end()).first;
+    interval -= loop_overhead;
+
+    std::cout << "Loop overhead is: " << loop_overhead <<"\n";
+
+
     auto start = std::chrono::high_resolution_clock::now();
-
-
     // v4
     if (candidates[0].get_family() == PDU::PDUType::IP){
         // Initialization of the pattern that will be sent.
         auto probing_pattern = build_probing_pattern4();
 
+
+
         uint16_t ip_id = 1;
+
 
         for (int i = 0; probe_sent < nb_probes; ++i, ++probe_sent, ++ip_id){
 
@@ -108,6 +158,8 @@ void rate_limit_sender_t::start() {
             }
 
             sender.send(probe_to_send);
+
+
             wait_loop(interval);
             if (probe_sent == nb_probes - 1){
                 auto end = std::chrono::high_resolution_clock::now();

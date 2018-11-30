@@ -262,7 +262,9 @@ void rate_limit_analyzer_t::start(const std::string &pcap_file)  {
     // Matches probe with replies and extract responsiveness
     sort_by_timestamp(outgoing_packets);
     // Remove the last packet that had been sent to shut the sniffer.
-    outgoing_packets.erase(outgoing_packets.end()-1);
+    if (!outgoing_packets.empty()){
+        outgoing_packets.erase(outgoing_packets.end()-1);
+    }
     if (is_v4){
         for(const auto & packet : outgoing_packets){
             auto outgoing_pdu = packet.pdu();
@@ -611,6 +613,11 @@ int rate_limit_analyzer_t::compute_icmp_change_point(
 //        return std::make_pair(triggering_loss_rate, triggering_loss_rate);
 //    }
 //    return std::make_pair(triggering_loss_rate, triggering_loss_rate + interval_length);
+
+    // Early return if data is empty
+    if (data.empty()){
+        return static_cast<int>(data.size());
+    }
 
     // Create the R context
     if (!already_loaded){

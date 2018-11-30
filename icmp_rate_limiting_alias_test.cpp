@@ -28,7 +28,7 @@ using namespace Tins;
 using namespace utils;
 namespace {
 
-    std::vector<int> custom_rates {3000, 4000, 5000};
+    std::vector<int> custom_rates {5000};
 
     // The format of the input file should be the following:
     // GROUP_ID, ADDRESS_FAMILY, PROBING_TYPE (DIRECT, INDIRECT), PROTOCOL (tcp, udp, icmp), INTERFACE_TYPE (CANDIDATE, WITNESS),
