@@ -18,7 +18,7 @@ namespace utils{
     };
 
     enum class probing_style_t {DIRECT, INDIRECT, UNKNOWN};
-    enum class interface_type_t {CANDIDATE, WITNESS, UNKNOWN};
+    enum class interface_type_t {CANDIDATE = 0, WITNESS = 1, UNKNOWN = 2};
     using packet_interval_t = std::pair<int, int>;
     using responsive_info_probe_t = std::pair<bool, Tins::Packet>;
 

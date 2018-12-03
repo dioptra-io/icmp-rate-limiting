@@ -12,7 +12,9 @@ class rate_limit_group_t {
 public:
 
     void execute_group_probes4(const std::vector<probe_infos_t> & probes_infos,
-                               const std::vector<int> & probing_rates,
+                               int probing_rate,
+                               const std::pair<double, double> & target_loss_rate_interval,
+                               bool   triggering_probing_rate_already_found,
                                const std::string & group_type,
                                const std::string & output_dir_group
 
@@ -31,8 +33,9 @@ public:
             const std::string & output_dir_group);
 
     std::stringstream analyse_group_probes4(
-            const std::vector<probe_infos_t>& groups,
-            const std::vector<int> & probing_rates,
+            const std::vector<probe_infos_t> & probes_infos,
+            int   starting_probing_rate,
+            const std::pair<double, double> & target_loss_interval,
             const std::string & group_type,
             const std::string & output_dir_group);
 

@@ -132,7 +132,7 @@ void rate_limit_sender_t::start() {
     double loop_overhead = mean_stddev(loop_overheads.begin(), loop_overheads.end()).first;
     interval -= loop_overhead;
 
-    std::cout << "Loop overhead is: " << loop_overhead <<"\n";
+    std::cout << "Loop overhead is: " << loop_overhead <<" us\n";
 
 
     auto start = std::chrono::high_resolution_clock::now();

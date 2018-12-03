@@ -28,7 +28,11 @@ using namespace Tins;
 using namespace utils;
 namespace {
 
-    std::vector<int> custom_rates {5000};
+
+    auto target_loss_rate_interval = std::pair<double, double> {0.05, 0.10};
+    auto starting_probing_rate = 500;
+    auto triggering_rate = 0;
+    std::vector<int> custom_rates{1000};
 
     // The format of the input file should be the following:
     // GROUP_ID, ADDRESS_FAMILY, PROBING_TYPE (DIRECT, INDIRECT), PROTOCOL (tcp, udp, icmp), INTERFACE_TYPE (CANDIDATE, WITNESS),
@@ -188,7 +192,7 @@ namespace {
 int main(int argc, char * argv[]){
     /**
     * END TO END ALGORITHM TO DETERMINE IF TWO ADDRESSES ARE ALIASES.
-    * - Probe each interface separately with progressive rates.
+    * - Probe each interface separately with progressive rates until the targeted loss rate is triggered.
     * - Determine the rate where the responding behaviour changes for each interface (Technique: compute loss rates on intervals)
     * - Probe trios of interfaces with progressive rates, two are the candidates, one is the witness.
     * - Determine the rate where the responding behaviour changes.
@@ -335,28 +339,47 @@ int main(int argc, char * argv[]){
 
             if (!group_only){
                 std::cout << "Proceeding to probing individual phase with same probing rate\n";
-                rate_limit_individual.execute_individual_probes4(probes_infos, custom_rates, pcap_dir_individual);
+                triggering_rate = rate_limit_individual.execute_individual_probes4(probes_infos, starting_probing_rate, target_loss_rate_interval, pcap_dir_individual);
             }
 
             if (!individual_only){
+                bool triggering_rate_already_found = true;
+                if (triggering_rate == 0){
+                    triggering_rate = starting_probing_rate;
+                    triggering_rate_already_found = false;
+                }
                 // Group probing same rate
                 std::cout << "Proceeding to probing groups phase with same probing rate\n";
-                rate_limit_group.execute_group_probes4(probes_infos, custom_rates, "GROUPSPR", pcap_dir_groups);
+                rate_limit_group.execute_group_probes4(probes_infos, triggering_rate, target_loss_rate_interval, triggering_rate_already_found,  "GROUPSPR", pcap_dir_groups);
                 std::cout << "Proceeding to probing groups phase with different probing rate\n";
-                rate_limit_group_dpr.execute_group_probes4(probes_infos, custom_rates, "GROUPDPR", pcap_dir_groups);
+                rate_limit_group_dpr.execute_group_probes4(probes_infos, triggering_rate, target_loss_rate_interval, triggering_rate_already_found, "GROUPDPR", pcap_dir_groups);
             }
 
         }
         // Analysis
         if(!probe_only){
+
+            bool triggering_rate_already_found = true;
+            if (triggering_rate == 0){
+                triggering_rate = starting_probing_rate;
+                triggering_rate_already_found = false;
+            }
             if (!group_only){
-                auto individual_ostream = rate_limit_individual.analyse_individual_probes4(probes_infos, custom_rates, pcap_dir_individual);
+                auto individual_ostream = rate_limit_individual.analyse_individual_probes4(
+                        probes_infos,
+                        triggering_rate,
+                        target_loss_rate_interval,
+                        pcap_dir_individual);
                 ostream << individual_ostream.str();
             }
             if (!individual_only){
-                auto group_spr_ostream = rate_limit_group.analyse_group_probes4(probes_infos, custom_rates, "GROUPSPR", pcap_dir_groups);
+                auto group_spr_ostream = rate_limit_group.analyse_group_probes4(probes_infos, triggering_rate,
+                                                                                target_loss_rate_interval,
+                                                                                "GROUPSPR", pcap_dir_groups);
                 ostream << group_spr_ostream.str();
-                auto group_dpr_ostream = rate_limit_group_dpr.analyse_group_probes4(probes_infos, custom_rates, "GROUPDPR", pcap_dir_groups);
+                auto group_dpr_ostream = rate_limit_group_dpr.analyse_group_probes4(probes_infos, triggering_rate,
+                                                                                    target_loss_rate_interval,
+                                                                                    "GROUPDPR", pcap_dir_groups);
                 ostream << group_dpr_ostream.str();
                 std::ofstream outfile (output_file);
                 outfile << ostream.str() << "\n";
