@@ -7,18 +7,12 @@
 
 #include <sstream>
 #include <probe_infos_t.hpp>
+#include <algorithm_context_t.hpp>
 
 class rate_limit_group_t {
 public:
 
-    void execute_group_probes4(const std::vector<probe_infos_t> & probes_infos,
-                               int probing_rate,
-                               const std::pair<double, double> & target_loss_rate_interval,
-                               bool   triggering_probing_rate_already_found,
-                               const std::string & group_type,
-                               const std::string & output_dir_group
 
-    );
 
     void execute_group_probes4(const Tins::NetworkInterface & sniff_interface,
                                const std::vector<probe_infos_t> & group,
@@ -26,18 +20,26 @@ public:
                                const std::string & group_type,
                                const std::string & output_dir_group );
 
+    void execute_group_probes4(const std::vector<probe_infos_t> & probes_infos,
+                               const std::pair<double, double> & target_loss_rate_interval,
+                               const std::string & group_type,
+                               const utils::options_t & options,
+                               algorithm_context_t & algorithm_context
+    );
+
     std::stringstream analyse_group_probes4(
             const std::vector<probe_infos_t> & group,
             int probing_rate,
             const std::string & group_type,
-            const std::string & output_dir_group);
+            const std::string & output_dir_group,
+            algorithm_context_t & algorithm_context);
 
-    std::stringstream analyse_group_probes4(
+    void analyse_group_probes4(
             const std::vector<probe_infos_t> & probes_infos,
-            int   starting_probing_rate,
             const std::pair<double, double> & target_loss_interval,
             const std::string & group_type,
-            const std::string & output_dir_group);
+            const utils::options_t & options,
+            algorithm_context_t & algorithm_context);
 
     void execute_group_probes6(const std::vector<probe_infos_t> & probes_infos,
                                const std::vector<int> & probing_rates,
@@ -67,7 +69,7 @@ public:
 
 private:
 
-    int compute_rate_factor_dpr(int probing_rate, int n_ip);
+    int compute_rate_factor_dpr(int before_triggering_rate, int triggering_rate, int n_ip);
     int compute_probing_rate(int base_probing_rate, const std::vector<probe_infos_t> & groups);
 };
 

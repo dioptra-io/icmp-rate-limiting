@@ -18,13 +18,29 @@ using namespace Tins;
 
 using namespace utils;
 
+namespace{
 // Create the R context
-RInside R_context;
+    RInside R_context;
 // Load R libraries
-auto load_R_libraries = std::string("library(changepoint);"
-                                    "library(changepoint.np);");
+    auto load_R_libraries = std::string("library(changepoint);"
+                                        "library(changepoint.np);");
 
-bool already_loaded = false;
+    bool already_loaded = false;
+
+    struct compare_icmp_packet{
+        bool operator() (const Packet & packet1, const Packet & packet2){
+            auto icmp1 = packet1.pdu()->template rfind_pdu<ICMP>();
+            auto icmp2 = packet2.pdu()->template rfind_pdu<ICMP>();
+
+            if (icmp1.id() != icmp2.id()){
+                return icmp1.id() < icmp2.id();
+            } else {
+                return icmp1.sequence() < icmp2.sequence();
+            }
+        };
+    };
+}
+
 
 
 rate_limit_analyzer_t::rate_limit_analyzer_t(probing_style_t probing_style, PDU::PDUType family) :
@@ -224,11 +240,38 @@ void rate_limit_analyzer_t::start(const std::string &pcap_file)  {
 
     // v4 or v6
 
-
-
-    auto build_series4 = [this](Tins::Packet & packet){
+//    auto src_address = NetworkInterface::default_interface().ipv4_address();
+    IPv4Address src_address;
+    auto build_series4 = [this, &src_address](Tins::Packet & packet){
         auto pdu = packet.pdu();
+        auto ip = pdu->find_pdu<IP>();
         auto icmp = pdu->find_pdu<ICMP>();
+
+        if (src_address == "0.0.0.0"){
+            if (icmp != nullptr && icmp->type() == ICMP::Flags ::ECHO_REQUEST){
+                src_address = ip->src_addr();
+            }
+        }
+
+        if (ip->src_addr() == src_address){
+            // This packet was destinated to another address
+            auto it = this->matchers4.find(ip->dst_addr());
+            if (it == this->matchers4.end()){
+                // Do nothing
+                return true;
+            }
+        }
+
+
+        // This packet was from another address
+        if (ip->dst_addr() == src_address){
+            auto it = this->matchers4.find(ip->src_addr());
+            if (it == this->matchers4.end()){
+                // Do nothing
+                return true;
+            }
+        }
+
         if (icmp == NULL or icmp->type() == Tins::ICMP::Flags::ECHO_REQUEST){
             outgoing_packets.push_back(packet);
         } else {
@@ -261,6 +304,13 @@ void rate_limit_analyzer_t::start(const std::string &pcap_file)  {
 
     // Matches probe with replies and extract responsiveness
     sort_by_timestamp(outgoing_packets);
+
+
+
+    // Sort the replies by icmp sequence so we can perform a binary search on the icmp replies
+    std::sort(icmp_replies.begin(), icmp_replies.end(), compare_icmp_packet{});
+
+
     // Remove the last packet that had been sent to shut the sniffer.
     if (!outgoing_packets.empty()){
         outgoing_packets.erase(outgoing_packets.end()-1);
@@ -270,14 +320,20 @@ void rate_limit_analyzer_t::start(const std::string &pcap_file)  {
             auto outgoing_pdu = packet.pdu();
             // Find the IP layer
 
-            auto ip = outgoing_pdu->rfind_pdu<Tins::IP>();
+            auto ip = outgoing_pdu->rfind_pdu<IP>();
 
-            auto it = std::find_if(icmp_replies.begin(), icmp_replies.end(), [&ip](const Tins::Packet & matching_packet){
+
+            auto range = std::equal_range(icmp_replies.begin(), icmp_replies.end(), packet, compare_icmp_packet());
+
+            auto dist = std::distance(range.first, range.second);
+            // Find the matching reply if existing.
+            auto it = std::find_if(range.first, range.second,
+                    [&ip](const Tins::Packet & matching_packet){
 
 
                 auto pdu = matching_packet.pdu();
                 auto reply_ip = pdu->find_pdu<IP>();
-                auto icmp = pdu->find_pdu<Tins::ICMP>();
+                auto icmp = pdu->find_pdu<ICMP>();
 
                 // We assume direct probing so check only the source
 
@@ -292,7 +348,7 @@ void rate_limit_analyzer_t::start(const std::string &pcap_file)  {
                         // We are in an ICMP direct probing so we match se probes with the icmp sequence number
                         auto icmp_request = ip.find_pdu<ICMP>();
                         if (icmp_request != nullptr){
-                            if (icmp->sequence() == icmp_request->sequence()){
+                            if (icmp->sequence() == icmp_request->sequence() && icmp->id() == icmp_request->id()){
                                 return true;
                             }
                         }
@@ -316,7 +372,7 @@ void rate_limit_analyzer_t::start(const std::string &pcap_file)  {
                 }
                 return false;
             });
-            if (it != icmp_replies.end()){
+            if (it != range.second){
                 auto ip_reply = it->pdu()->template rfind_pdu<Tins::IP>().src_addr();
                 // Erase this response.
 
@@ -884,6 +940,19 @@ double rate_limit_analyzer_t::correlation_high_low6(const Tins::IPv6Address &hig
 
 
     return correlation;
+}
+
+rate_limit_analyzer_t::rate_limit_analyzer_t(const rate_limit_analyzer_t &other) :
+        ip_family (other.ip_family),
+        probing_style (other.probing_style),
+        matchers4 (other.matchers4),
+        matchers6 (other.matchers6),
+        packets_per_interface4 (other.packets_per_interface4),
+        packets_per_interface6 (other.packets_per_interface6),
+        outgoing_packets(other.outgoing_packets),
+        icmp_replies(other.icmp_replies)
+{
+
 }
 
 

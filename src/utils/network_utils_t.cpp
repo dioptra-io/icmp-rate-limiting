@@ -120,6 +120,7 @@ namespace utils{
 
             // Start the analysis of responsiveness.
             rate_limit_analyzer_t rate_limit_analyzer(probe_infos.get_probing_style(), matchers);
+            std::cout << "Analyzing " << pcap_file << "\n";
             try {
                 rate_limit_analyzer.start(pcap_file);
             } catch (const pcap_error & error) {

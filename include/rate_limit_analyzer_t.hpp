@@ -29,6 +29,9 @@ public:
     rate_limit_analyzer_t(utils::probing_style_t probing_style, const std::unordered_map<Tins::IPv4Address, Tins::IP> & matchers);
     rate_limit_analyzer_t(utils::probing_style_t probing_style, const std::unordered_map<Tins::IPv6Address, Tins::IPv6> & matchers);
 
+    // Copy constructor
+    rate_limit_analyzer_t (const rate_limit_analyzer_t & other);
+
 
     /**
      * Aliases

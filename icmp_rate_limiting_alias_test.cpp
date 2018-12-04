@@ -31,7 +31,6 @@ namespace {
 
     auto target_loss_rate_interval = std::pair<double, double> {0.05, 0.10};
     auto starting_probing_rate = 500;
-    auto triggering_rate = 0;
     std::vector<int> custom_rates{1000};
 
     // The format of the input file should be the following:
@@ -213,18 +212,16 @@ int main(int argc, char * argv[]){
 
     std::string help_message = "";
 
-    bool analyse_only = false;
-    bool probe_only = false;
-    bool group_only = false;
-    bool individual_only = false;
+    options_t options;
     auto targets_file_path = std::string("");
-    std::string pcap_dir_individual {"resources/pcap/individual/"};
-    std::string pcap_dir_groups {"resources/pcap/groups/"};
+    options.pcap_dir_individual  = "resources/pcap/individual/";
+    options.pcap_dir_groups = "resources/pcap/groups/";
+
     std::string pcap_prefix {""};
     std::string output_file;
 
     // Declare the supported options.
-    po::options_description desc("Allowed options");
+    po::options_description desc("Options");
     desc.add_options()
             ("help,h", help_message.c_str())
             ("targets-file,t", po::value<std::string>(), "Format is GROUP_ID, ADDRESS_FAMILY, PROBING_TYPE (DIRECT, INDIRECT), PROTOCOL (tcp, udp, icmp), INTERFACE_TYPE (CANDIDATE, WITNESS),"\
@@ -236,7 +233,10 @@ int main(int argc, char * argv[]){
             ("group-only,G", "only do group probing")
             ("individual-only,I", "only do individual probing")
             ("analyse-only,a", "do not probe, only start analysis")
-            ("probe-only,p", "do not analyse, only probe");
+            ("use-individual,u", "use individual for group analyse triggering rate")
+            ("use-group,U", "use group for group analyse triggering rate")
+            ("probe-only,p", "do not analyse, only probe")
+            ("debug-src-address,d", "specify source address for debug");
 
     po::variables_map vm;
     po::store(po::parse_command_line(argc, argv, desc), vm);
@@ -259,17 +259,17 @@ int main(int argc, char * argv[]){
     }
 
     if (vm.count("pcap-individual-dir")) {
-        pcap_dir_individual = vm["pcap-individual-dir"].as<std::string>();
+        options.pcap_dir_individual = vm["pcap-individual-dir"].as<std::string>();
         std::cout << "pcap individual dir set to  "
-                  << pcap_dir_individual << "\n";
+                  << options.pcap_dir_individual << "\n";
 
 
     }
 
     if (vm.count("pcap-group-dir")) {
-        pcap_dir_groups = vm["pcap-group-dir"].as<std::string>();
+        options.pcap_dir_groups = vm["pcap-group-dir"].as<std::string>();
         std::cout << "pcap groups dir set to  "
-                  << pcap_dir_groups << "\n";
+                  << options.pcap_dir_groups << "\n";
     }
 
     if (vm.count("pcap-prefix")) {
@@ -277,8 +277,8 @@ int main(int argc, char * argv[]){
         std::cout << "pcap prefix dir set to  "
                   << pcap_prefix << "\n";
 
-        pcap_dir_individual += pcap_prefix;
-        pcap_dir_groups += pcap_prefix;
+        options.pcap_dir_individual += pcap_prefix;
+        options.pcap_dir_groups += pcap_prefix;
     }
 
     if (vm.count("output-file")) {
@@ -288,23 +288,44 @@ int main(int argc, char * argv[]){
     }
 
     if (vm.count("individual-only")){
-        individual_only = true;
+        options.individual_only = true;
         std::cout << "Only individual probing will be done.\n";
     }
 
     if (vm.count("group-only")){
-        group_only = true;
+        options.group_only = true;
         std::cout << "Only group probing will be done.\n";
     }
     if (vm.count("analyse-only")) {
-        analyse_only = true;
+        options.analyse_only = true;
         std::cout << "Only analyse will be done.\n";
     }
+
+    if (vm.count("use-individual")) {
+        options.use_individual_for_analyse = true;
+        std::cout << "Individual pcap files will be used for group analyse.\n";
+    } else if (vm.count("use-group")) {
+        options.use_group_for_analyse = true;
+        std::cout << "Group pcap files will be used for group analyse.\n";
+    } else {
+        if (vm.count("group-only")) {
+            std::cerr << "Please choose which pcap files (individual or group) will be used for analyse."
+                         "Use -u or -U option\n";
+            exit(1);
+        } else {
+            options.use_individual_for_analyse = true;
+        }
+    }
+
     if (vm.count("probe-only")) {
-        probe_only = true;
+        options.probe_only = true;
         std::cout << "Only probing will be done.\n";
     }
 
+    if (vm.count("debug-src-address")) {
+        options.debug_src_address= vm["debug-src-address"].as<std::string>();
+        std::cout << "Individual pcap files will be used for group analyse.\n";
+    }
 
 
     auto probes_infos = parse_input_file(targets_file_path.c_str());
@@ -330,59 +351,69 @@ int main(int argc, char * argv[]){
 
     std::stringstream ostream;
 
+    /**
+     * Intialize algorithm context
+     */
+    algorithm_context_t algorithm_context;
+
+
     if (probes_infos[0].get_family() == PDU::PDUType::IP){
         // Individual probing
         rate_limit_individual_t rate_limit_individual;
         rate_limit_group_t rate_limit_group;
         rate_limit_group_t rate_limit_group_dpr;
-        if (!analyse_only){
+        if (!options.analyse_only){
 
-            if (!group_only){
+            if (!options.group_only){
                 std::cout << "Proceeding to probing individual phase with same probing rate\n";
-                triggering_rate = rate_limit_individual.execute_individual_probes4(probes_infos, starting_probing_rate, target_loss_rate_interval, pcap_dir_individual);
+                rate_limit_individual.execute_individual_probes4(probes_infos,
+                        starting_probing_rate,
+                                                                                   target_loss_rate_interval,
+                                                                                   options,
+                                                                                   algorithm_context);
             }
 
-            if (!individual_only){
-                bool triggering_rate_already_found = true;
-                if (triggering_rate == 0){
-                    triggering_rate = starting_probing_rate;
-                    triggering_rate_already_found = false;
-                }
+            if (!options.individual_only){
                 // Group probing same rate
                 std::cout << "Proceeding to probing groups phase with same probing rate\n";
-                rate_limit_group.execute_group_probes4(probes_infos, triggering_rate, target_loss_rate_interval, triggering_rate_already_found,  "GROUPSPR", pcap_dir_groups);
+                rate_limit_group.execute_group_probes4(probes_infos,
+                                                       target_loss_rate_interval,
+                                                       "GROUPSPR",
+                                                       options,
+                                                       algorithm_context);
                 std::cout << "Proceeding to probing groups phase with different probing rate\n";
-                rate_limit_group_dpr.execute_group_probes4(probes_infos, triggering_rate, target_loss_rate_interval, triggering_rate_already_found, "GROUPDPR", pcap_dir_groups);
+                rate_limit_group_dpr.execute_group_probes4(probes_infos,
+                                                           target_loss_rate_interval,
+                                                           "GROUPDPR",
+                                                           options,
+                                                           algorithm_context);
             }
 
         }
         // Analysis
-        if(!probe_only){
-
-            bool triggering_rate_already_found = true;
-            if (triggering_rate == 0){
-                triggering_rate = starting_probing_rate;
-                triggering_rate_already_found = false;
-            }
-            if (!group_only){
-                auto individual_ostream = rate_limit_individual.analyse_individual_probes4(
+        if(!options.probe_only){
+            if (!options.group_only){
+                rate_limit_individual.analyse_individual_probes4(
                         probes_infos,
-                        triggering_rate,
                         target_loss_rate_interval,
-                        pcap_dir_individual);
-                ostream << individual_ostream.str();
+                        options,
+                        algorithm_context);
+                algorithm_context.set_triggering_rate_already_found(true);
             }
-            if (!individual_only){
-                auto group_spr_ostream = rate_limit_group.analyse_group_probes4(probes_infos, triggering_rate,
-                                                                                target_loss_rate_interval,
-                                                                                "GROUPSPR", pcap_dir_groups);
-                ostream << group_spr_ostream.str();
-                auto group_dpr_ostream = rate_limit_group_dpr.analyse_group_probes4(probes_infos, triggering_rate,
-                                                                                    target_loss_rate_interval,
-                                                                                    "GROUPDPR", pcap_dir_groups);
-                ostream << group_dpr_ostream.str();
+            if (!options.individual_only){
+                rate_limit_group.analyse_group_probes4(probes_infos,
+                                                       target_loss_rate_interval,
+                                                       "GROUPSPR",
+                                                       options,
+                                                       algorithm_context);
+                algorithm_context.set_triggering_rate_already_found(true);
+                rate_limit_group_dpr.analyse_group_probes4(probes_infos,
+                                                           target_loss_rate_interval,
+                                                           "GROUPDPR",
+                                                           options,
+                                                           algorithm_context);
                 std::ofstream outfile (output_file);
-                outfile << ostream.str() << "\n";
+                outfile << algorithm_context.get_ostream().str() << "\n";
             }
 
         }
@@ -392,34 +423,34 @@ int main(int argc, char * argv[]){
         rate_limit_individual_t rate_limit_individual;
         rate_limit_group_t rate_limit_group;
         rate_limit_group_t rate_limit_group_dpr;
-        if (!analyse_only){
-            if (!group_only) {
+        if (!options.analyse_only){
+            if (!options.group_only) {
                 std::cout << "Proceeding to probing individual phase with same probing rate\n";
-                rate_limit_individual.execute_individual_probes6(probes_infos, custom_rates, pcap_dir_individual);
+                rate_limit_individual.execute_individual_probes6(probes_infos, custom_rates, options.pcap_dir_individual);
             }
 
-            if(!individual_only){
+            if(!options.individual_only){
                 // Group probing same rate
                 std::cout << "Proceeding to probing groups phase with same probing rate\n";
-                rate_limit_group.execute_group_probes6(probes_infos, custom_rates, "GROUPSPR", pcap_dir_groups);
+                rate_limit_group.execute_group_probes6(probes_infos, custom_rates, "GROUPSPR", options.pcap_dir_groups);
                 std::cout << "Proceeding to probing groups phase with different probing rate\n";
-                rate_limit_group_dpr.execute_group_probes6(probes_infos, custom_rates, "GROUPDPR", pcap_dir_groups);
+                rate_limit_group_dpr.execute_group_probes6(probes_infos, custom_rates, "GROUPDPR", options.pcap_dir_groups);
             }
 
 
 
         }
         // Analysis
-        if(!probe_only){
-            if(!group_only){
-                auto individual_ostream = rate_limit_individual.analyse_individual_probes6(probes_infos, custom_rates, pcap_dir_individual);
+        if(!options.probe_only){
+            if(!options.group_only){
+                auto individual_ostream = rate_limit_individual.analyse_individual_probes6(probes_infos, custom_rates, options.pcap_dir_individual);
                 ostream << individual_ostream.str();
             }
 
-            if (!individual_only){
-                auto group_spr_ostream = rate_limit_group.analyse_group_probes6(probes_infos, custom_rates, "GROUPSPR", pcap_dir_groups);
+            if (!options.individual_only){
+                auto group_spr_ostream = rate_limit_group.analyse_group_probes6(probes_infos, custom_rates, "GROUPSPR", options.pcap_dir_groups);
                 ostream << group_spr_ostream.str();
-                auto group_dpr_ostream = rate_limit_group_dpr.analyse_group_probes6(probes_infos, custom_rates, "GROUPDPR", pcap_dir_groups);
+                auto group_dpr_ostream = rate_limit_group_dpr.analyse_group_probes6(probes_infos, custom_rates, "GROUPDPR", options.pcap_dir_groups);
                 ostream << group_dpr_ostream.str();
                 std::ofstream outfile (output_file);
                 outfile << ostream.str() << "\n";
@@ -428,7 +459,7 @@ int main(int argc, char * argv[]){
         }
     }
 
-    std::cout << ostream.str();
+    std::cout << algorithm_context.get_ostream().str();
 
 }
 

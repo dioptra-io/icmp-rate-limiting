@@ -7,6 +7,7 @@
 
 #include <tins/tins.h>
 #include <probe_infos_t.hpp>
+#include "algorithm_context_t.hpp"
 
 class rate_limit_individual_t {
 public:
@@ -24,21 +25,26 @@ public:
      * @param output_dir_individual
      * @return the max probing rate among the candidates that triggered target_loss_rate
      */
-    int execute_individual_probes4(
+    void execute_individual_probes4(
             const std::vector<probe_infos_t> &probes_infos,
             int   starting_probing_rate,
             const std::pair<double, double> &target_loss_rate_interval,
-            const std::string &output_dir_individual);
+            const utils::options_t & options,
+            algorithm_context_t & algorithm_context
+    );
 
-    std::stringstream analyse_individual_probes4(const std::vector <probe_infos_t> & probes_infos,
-                                                 int starting_probing_rate,
-                                                 const std::pair<double, double> & target_loss_rate_interval,
-                                                 const std::string & output_dir_individual);
 
     std::stringstream analyse_individual_probes4(
             const probe_infos_t &probe_infos,
             int probing_rate,
-            const std::string & pcap_file);
+            const std::string & pcap_file,
+            algorithm_context_t & algorithm_context);
+
+    void analyse_individual_probes4(const std::vector <probe_infos_t> & probes_infos,
+                                    const std::pair<double, double> & target_loss_rate_interval,
+                                    const utils::options_t & options,
+                                    algorithm_context_t & algorithm_context);
+
 
     void execute_individual_probes6(
             const Tins::NetworkInterface &sniff_interface,
