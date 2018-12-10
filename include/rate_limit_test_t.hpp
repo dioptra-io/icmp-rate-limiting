@@ -81,6 +81,10 @@ public:
         rate_limit_sniffer.set_stop_sniffing(false);
         rate_limit_sniffer.start();
         rate_limit_sender.start();
+
+        // Wait for the last packet to get a possible answer
+        std::this_thread::sleep_for(std::chrono::seconds(1));
+
         rate_limit_sniffer.set_stop_sniffing(true);
         rate_limit_sniffer.join();
         //rate_limit_analyzer.start(get_pcap_file());

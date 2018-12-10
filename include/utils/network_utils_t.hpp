@@ -30,8 +30,13 @@ namespace utils{
                               const std::string & probing_type,
                               std::unordered_map<Tins::IPv4Address, int> & triggering_rates);
 
-    static auto maximum_probing_rate = 50000;
-    static auto minimum_probing_rate = 500;
+    int find_closest_rate(const probe_infos_t & first_candidate_probe_infos,
+                          const std::map<int, double> & loss_rate_by_probing_rate,
+                          const std::pair<double, double> & target_loss_rate_interval);
+
+    static auto maximum_probing_rate = std::pow(2, 16) - 1;
+    static auto minimum_probing_rate = 512;
+
     static auto maximum_binary_search_iteration = 8;
     static auto measurement_time = 5;
 }

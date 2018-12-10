@@ -130,7 +130,12 @@ void rate_limit_sender_t::start() {
 
     // Adjust the sleep time according to the loop overhead
     double loop_overhead = mean_stddev(loop_overheads.begin(), loop_overheads.end()).first;
-    interval -= loop_overhead;
+    if (loop_overhead < interval){
+        interval -= loop_overhead;
+    } else{
+        interval = 3;
+    }
+
 
     std::cout << "Loop overhead is: " << loop_overhead <<" us\n";
 

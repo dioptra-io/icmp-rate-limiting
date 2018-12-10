@@ -22,11 +22,13 @@ namespace utils{
         bool probe_only = false;
         bool group_only = false;
         bool individual_only = false;
+        bool is_custom_probing_rates = false;
+        std::vector<int> custom_probing_rates;
         bool use_individual_for_analyse = false;
         bool use_group_for_analyse = false;
+        bool first_only = false;
         std::string pcap_dir_individual = "";
         std::string pcap_dir_groups = "";
-        std::string debug_src_address = "";
     };
 
     enum class probing_style_t {DIRECT, INDIRECT, UNKNOWN};

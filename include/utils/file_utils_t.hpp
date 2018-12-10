@@ -14,7 +14,12 @@
 
 #include "../icmp_trigger_probes_t.hpp"
 #include "container_utils_t.hpp"
+#include <probe_infos_t.hpp>
+
 namespace utils{
+
+    std::vector<probe_infos_t> parse_input_file(const char * input_file_path);
+
     std::string build_pcap_name(const std::string & folder,
                                 const std::string & icmp_type,
                                 const std::string & destination,

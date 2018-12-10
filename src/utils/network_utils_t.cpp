@@ -74,6 +74,30 @@ namespace utils{
         return true;
     }
 
+    int find_closest_rate(const probe_infos_t & first_candidate_probe_infos,
+                          const std::map<int, double> & loss_rate_by_probing_rate,
+                          const std::pair<double, double> & target_loss_rate_interval){
+        auto closest_difference_loss_rate = 1.0;
+        auto closest_probing_rate = 0;
+        for (const auto & probing_rate_loss_rate: loss_rate_by_probing_rate){
+            auto loss_rate = probing_rate_loss_rate.second;
+            if (loss_rate > target_loss_rate_interval.second){
+                auto difference_loss_rate = loss_rate - target_loss_rate_interval.second;
+                if (difference_loss_rate < closest_difference_loss_rate){
+                    closest_difference_loss_rate = difference_loss_rate;
+                    closest_probing_rate = probing_rate_loss_rate.first;
+                }
+            } else {
+                auto difference_loss_rate = target_loss_rate_interval.first - loss_rate;
+                if (difference_loss_rate < closest_difference_loss_rate){
+                    closest_difference_loss_rate = difference_loss_rate;
+                    closest_probing_rate = probing_rate_loss_rate.first;
+                }
+            }
+        }
+        return closest_probing_rate;
+    }
+
     int find_triggering_rate(const probe_infos_t & probe_infos,
                              const std::vector<probe_infos_t> & probes_infos,
                               int starting_probing_rate,
@@ -150,13 +174,9 @@ namespace utils{
         auto has_found_triggering_rate = triggering_rates.find(real_target) != triggering_rates.end();
         // In case no triggering rate has been found, take the closest value to the triggering rate of the first candidate
         // If it is the first candidate, take the last probing rate of the binary search.
-        auto closest_probing_rate = 0;
         if (!has_found_triggering_rate){
-            if (probe_infos.get_real_target4() == first_candidate_probe_infos.get_real_target4()){
-                closest_probing_rate = probing_rate;
-            } else {
-                closest_probing_rate = loss_rate_by_probing_rate.lower_bound(triggering_rates[first_candidate_probe_infos.get_real_target4()])->first;
-            }
+            auto closest_probing_rate = find_closest_rate(first_candidate_probe_infos, loss_rate_by_probing_rate, target_loss_rate_interval);
+            std::cout << "Took the probing rate that triggered the closest loss rate to the target loss rate interval" << closest_probing_rate << "\n";
             triggering_rates[real_target] = closest_probing_rate;
         }
 
