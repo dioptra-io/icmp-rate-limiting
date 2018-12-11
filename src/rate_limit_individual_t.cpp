@@ -232,13 +232,14 @@ void rate_limit_individual_t::analyse_individual_probes4(const std::vector <prob
                 auto pcap_file = build_pcap_name(options.pcap_dir_individual, icmp_type, real_target.to_string(),
                                                  "INDIVIDUAL", i);
                 algorithm_context.get_ostream()
-                        << analyse_individual_probes4(first_candidate, minimum_probing_rate, pcap_file,
+                        << analyse_individual_probes4(first_candidate, i, pcap_file,
                                                       algorithm_context).str();
             }
             catch (const pcap_error & error) {
                 std::cerr << error.what() << "\n";
             }
         }
+        return;
     }
 
 

@@ -29,7 +29,7 @@ using namespace utils;
 namespace {
 
 
-    auto target_loss_rate_interval = std::pair<double, double> {0.05, 0.10};
+    auto target_loss_rate_interval = std::pair<double, double> {0.10, 0.15};
     auto starting_probing_rate = minimum_probing_rate;
     std::vector<int> custom_rates{1000};
 

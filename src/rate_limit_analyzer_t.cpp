@@ -687,7 +687,7 @@ int rate_limit_analyzer_t::compute_icmp_change_point(
 
     R_context["data"] = binary_responses;
 
-    auto run_change_point_algorithm = std::string("data.man=cpt.meanvar(data, method='PELT',penalty='MBIC')");
+    auto run_change_point_algorithm = std::string("data.man=cpt.meanvar(data, method='PELT',penalty='Manual', pen.value='5 * log(n)')");
 
     R_context.parseEvalQ(run_change_point_algorithm);
 
