@@ -14,6 +14,7 @@
 #include <rate_limit_estimate_t.hpp>
 #include <markov_t.hpp>
 #include <alias_t.hpp>
+#include "probe_infos_t.hpp"
 
 class rate_limit_analyzer_t {
 
@@ -24,21 +25,28 @@ public:
     /**
      * Constructors
      */
-
+    rate_limit_analyzer_t();
     explicit rate_limit_analyzer_t(utils::probing_style_t probing_style, Tins::PDU::PDUType);
+
     rate_limit_analyzer_t(utils::probing_style_t probing_style, const std::unordered_map<Tins::IPv4Address, Tins::IP> & matchers);
+
     rate_limit_analyzer_t(utils::probing_style_t probing_style, const std::unordered_map<Tins::IPv6Address, Tins::IPv6> & matchers);
 
+    rate_limit_analyzer_t(utils::probing_style_t probing_style,
+                          const std::unordered_map<Tins::IPv4Address, Tins::IP> & matchers4,
+                          const std::unordered_map<Tins::IPv6Address, Tins::IPv6> & matchers6);
     // Copy constructor
     rate_limit_analyzer_t (const rate_limit_analyzer_t & other);
 
 
+
+    static rate_limit_analyzer_t build_rate_limit_analyzer_t_from_probe_infos(const std::vector<probe_infos_t> & probes_infos);
     /**
      * Aliases
      */
 
-    template<typename IPvAddress>
-    using responsiveness_t = std::unordered_map<IPvAddress, std::vector<utils::responsive_info_probe_t>>;
+    template<typename T>
+    using responsiveness_t = std::unordered_map<T, std::vector<utils::responsive_info_probe_t>>;
 
     using time_interval_t = std::pair<double,double>;
     using responsiveness_time_interval_t = std::tuple<bool, int, time_interval_t >;
@@ -50,38 +58,28 @@ public:
      */
     void start(const std::string &pcap_file);
 
-    std::unordered_map<Tins::IPv4Address, time_series_t> extract_responsiveness_time_series4();
-    std::unordered_map<Tins::IPv6Address, time_series_t> extract_responsiveness_time_series6();
+    std::unordered_map<std::string, time_series_t> extract_responsiveness_time_series();
 
     /**
      * Compute the loss rate
      * @return
      */
-    std::unordered_map<Tins::IPv4Address, double> compute_loss_rate4();
-    double compute_loss_rate(const Tins::IPv4Address & ip) const;
-
-    std::unordered_map<Tins::IPv6Address, double> compute_loss_rate6();
-    double compute_loss_rate(const Tins::IPv6Address & ip) const;
-
+    std::unordered_map<std::string, double> compute_loss_rate();
+    double compute_loss_rate(const std::string & ip) const;
     /**
      * Compute the transition matrices
      * @param address
      * @return
      */
-    gilbert_elliot_t compute_loss_model4(const Tins::IPv4Address & address) const;
-    gilbert_elliot_t compute_loss_model6(const Tins::IPv6Address & address) const;
+    gilbert_elliot_t compute_loss_model(const std::string & address) const;
 
     /**
      * Compute the changing behaviour moment of a time serie
      * @return
      */
-    std::unordered_map<Tins::IPv4Address, int> compute_icmp_change_point4() const;
+    std::unordered_map<std::string, int> compute_icmp_change_point() const;
 
-    std::unordered_map<Tins::IPv6Address, int> compute_icmp_change_point6() const;
-
-    int compute_icmp_change_point4(const Tins::IPv4Address &) const;
-
-    int compute_icmp_change_point6(const Tins::IPv6Address &) const;
+    int compute_icmp_change_point(const std::string &) const;
 
 
     /**
@@ -91,40 +89,29 @@ public:
      * @return
      */
 
-    double correlation4(const Tins::IPv4Address &ip_address1,
-                       const Tins::IPv4Address &ip_address2);
+    double correlation(const std::string & ip_address1,
+                        const std::string &ip_address2);
 
-    double correlation6(const Tins::IPv6Address &ip_address1,
-                        const Tins::IPv6Address &ip_address2);
-
-
-    double correlation_high_low4(const Tins::IPv4Address &ip_address1,
-                                const Tins::IPv4Address &ip_address2);
-
-
-    double correlation_high_low6(const Tins::IPv6Address &ip_address1,
-                                 const Tins::IPv6Address &ip_address2);
+    double correlation_high_low(const std::string & ip_address1,
+                                const std::string &ip_address2);
 
 
     void dump_loss_rate();
     void dump_time_series();
 
 
-    std::string serialize_raw4();
-    std::string serialize_raw6();
+    std::string serialize_raw();
     
-    std::string serialize_raw4(const Tins::IPv4Address &);
-    std::string serialize_raw6(const Tins::IPv4Address &);
+    std::string serialize_raw(const std::string &);
 
 
 
     std::vector<int> responsiveness_to_binary(const std::vector<utils::responsive_info_probe_t> & responses) const ;
 
     utils::probing_style_t get_probing_style() const;
-    std::vector<utils::responsive_info_probe_t> get_raw_packets4(const Tins::IPv4Address &ip) const;
-    std::vector<utils::responsive_info_probe_t> get_raw_packets6(const Tins::IPv6Address &ip) const;
+    std::vector<utils::responsive_info_probe_t> get_raw_packets(const std::string &ip) const;
 
-    time_series_t get_responsiveness(const Tins::IPv4Address & address);
+    time_series_t get_responsiveness(const std::string & address);
 
 private:
     // To match unresponsive probes with their original ip.
@@ -155,9 +142,7 @@ private:
     std::unordered_map<Tins::IPv6Address, Tins::IPv6> matchers6;
 
 
-    responsiveness_t<Tins::IPv4Address> packets_per_interface4;
-
-    responsiveness_t<Tins::IPv6Address> packets_per_interface6;
+    responsiveness_t<std::string> packets_per_interface;
     std::vector<Tins::Packet> outgoing_packets;
     std::vector<Tins::Packet> icmp_replies;
 

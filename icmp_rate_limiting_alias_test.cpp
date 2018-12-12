@@ -29,7 +29,7 @@ using namespace utils;
 namespace {
 
 
-    auto target_loss_rate_interval = std::pair<double, double> {0.10, 0.15};
+    auto target_loss_rate_interval = std::pair<double, double> {0.05, 0.20};
     auto starting_probing_rate = minimum_probing_rate;
     std::vector<int> custom_rates{1000};
 
@@ -216,110 +216,69 @@ int main(int argc, char * argv[]){
     algorithm_context_t algorithm_context;
 
 
-    if (probes_infos[0].get_family() == PDU::PDUType::IP){
-        // Individual probing
-        rate_limit_individual_t rate_limit_individual;
-        rate_limit_group_t rate_limit_group;
-        rate_limit_group_t rate_limit_group_dpr;
-        if (!options.analyse_only){
 
-            if (!options.group_only){
-                std::cout << "Proceeding to probing individual phase with progressive probing rate\n";
-                rate_limit_individual.execute_individual_probes4(probes_infos,
-                        starting_probing_rate,
-                                                                                   target_loss_rate_interval,
-                                                                                   options,
-                                                                                   algorithm_context);
-                if (!options.individual_only){
-                    std::this_thread::sleep_for(std::chrono::seconds(measurement_time + 1));
-                }
-            }
+    // Individual probing
+    rate_limit_individual_t rate_limit_individual;
+    rate_limit_group_t rate_limit_group;
+    rate_limit_group_t rate_limit_group_dpr;
+    if (!options.analyse_only){
 
+        if (!options.group_only){
+            std::cout << "Proceeding to probing individual phase with progressive probing rate\n";
+            rate_limit_individual.execute_individual_probes(probes_infos,
+                    starting_probing_rate,
+                                                                               target_loss_rate_interval,
+                                                                               options,
+                                                                               algorithm_context);
             if (!options.individual_only){
-                // Group probing same rate
-                std::cout << "Proceeding to probing groups phase with same probing rate\n";
-                rate_limit_group.execute_group_probes4(probes_infos,
-                                                       target_loss_rate_interval,
-                                                       "GROUPSPR",
-                                                       options,
-                                                       algorithm_context);
                 std::this_thread::sleep_for(std::chrono::seconds(measurement_time + 1));
-                std::cout << "Proceeding to probing groups phase with different probing rate\n";
-                rate_limit_group_dpr.execute_group_probes4(probes_infos,
-                                                           target_loss_rate_interval,
-                                                           "GROUPDPR",
-                                                           options,
-                                                           algorithm_context);
             }
-
         }
-        // Analysis
-        if(!options.probe_only){
-            if (!options.group_only){
-                rate_limit_individual.analyse_individual_probes4(
-                        probes_infos,
-                        target_loss_rate_interval,
-                        options,
-                        algorithm_context);
-                algorithm_context.set_triggering_rate_already_found(true);
-            }
-            if (!options.individual_only){
-                rate_limit_group.analyse_group_probes4(probes_infos,
+
+        if (!options.individual_only){
+            // Group probing same rate
+            std::cout << "Proceeding to probing groups phase with same probing rate\n";
+            rate_limit_group.execute_group_probes(probes_infos,
+                                                   target_loss_rate_interval,
+                                                   "GROUPSPR",
+                                                   options,
+                                                   algorithm_context);
+            std::this_thread::sleep_for(std::chrono::seconds(measurement_time + 1));
+            std::cout << "Proceeding to probing groups phase with different probing rate\n";
+            rate_limit_group_dpr.execute_group_probes(probes_infos,
                                                        target_loss_rate_interval,
-                                                       "GROUPSPR",
+                                                       "GROUPDPR",
                                                        options,
                                                        algorithm_context);
-                algorithm_context.set_triggering_rate_already_found(true);
-                rate_limit_group_dpr.analyse_group_probes4(probes_infos,
-                                                           target_loss_rate_interval,
-                                                           "GROUPDPR",
-                                                           options,
-                                                           algorithm_context);
-            }
         }
-        std::ofstream outfile (output_file);
-        outfile << algorithm_context.get_ostream().str() << "\n";
 
-
-    } else if (probes_infos[0].get_family() == PDU::PDUType::IPv6){
-        rate_limit_individual_t rate_limit_individual;
-        rate_limit_group_t rate_limit_group;
-        rate_limit_group_t rate_limit_group_dpr;
-        if (!options.analyse_only){
-            if (!options.group_only) {
-                std::cout << "Proceeding to probing individual phase with same probing rate\n";
-                rate_limit_individual.execute_individual_probes6(probes_infos, custom_rates, options.pcap_dir_individual);
-            }
-
-            if(!options.individual_only){
-                // Group probing same rate
-                std::cout << "Proceeding to probing groups phase with same probing rate\n";
-                rate_limit_group.execute_group_probes6(probes_infos, custom_rates, "GROUPSPR", options.pcap_dir_groups);
-                std::cout << "Proceeding to probing groups phase with different probing rate\n";
-                rate_limit_group_dpr.execute_group_probes6(probes_infos, custom_rates, "GROUPDPR", options.pcap_dir_groups);
-            }
-
-
-
+    }
+    // Analysis
+    if(!options.probe_only){
+        if (!options.group_only){
+            rate_limit_individual.analyse_individual_probes(
+                    probes_infos,
+                    target_loss_rate_interval,
+                    options,
+                    algorithm_context);
+            algorithm_context.set_triggering_rate_already_found(true);
         }
-        // Analysis
-        if(!options.probe_only){
-            if(!options.group_only){
-                auto individual_ostream = rate_limit_individual.analyse_individual_probes6(probes_infos, custom_rates, options.pcap_dir_individual);
-                ostream << individual_ostream.str();
-            }
-
-            if (!options.individual_only){
-                auto group_spr_ostream = rate_limit_group.analyse_group_probes6(probes_infos, custom_rates, "GROUPSPR", options.pcap_dir_groups);
-                ostream << group_spr_ostream.str();
-                auto group_dpr_ostream = rate_limit_group_dpr.analyse_group_probes6(probes_infos, custom_rates, "GROUPDPR", options.pcap_dir_groups);
-                ostream << group_dpr_ostream.str();
-                std::ofstream outfile (output_file);
-                outfile << ostream.str() << "\n";
-            }
-
+        if (!options.individual_only){
+            rate_limit_group.analyse_group_probes(probes_infos,
+                                                   target_loss_rate_interval,
+                                                   "GROUPSPR",
+                                                   options,
+                                                   algorithm_context);
+            algorithm_context.set_triggering_rate_already_found(true);
+            rate_limit_group_dpr.analyse_group_probes(probes_infos,
+                                                       target_loss_rate_interval,
+                                                       "GROUPDPR",
+                                                       options,
+                                                       algorithm_context);
         }
     }
+    std::ofstream outfile (output_file);
+    outfile << algorithm_context.get_ostream().str() << "\n";
 
     std::cout << algorithm_context.get_ostream().str();
 

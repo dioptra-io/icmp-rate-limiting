@@ -11,11 +11,11 @@ using namespace Tins;
 
 namespace utils{
     bool compute_next_probing_rate(double loss_rate,
-                                  const IPv4Address & real_target,
+                                  const std::string & real_target,
                                   std::map<int, double> & loss_rate_by_probing_rate,
                                   int & probing_rate,
                                   int starting_probing_rate,
-                                  std::unordered_map<IPv4Address, int> & triggering_rates,
+                                  std::unordered_map<std::string, int> & triggering_rates,
                                   const std::pair<double, double> & target_loss_rate_interval,
                                   bool & is_binary_search,
                                   int & binary_search_iteration
@@ -104,18 +104,19 @@ namespace utils{
                               const std::pair<double, double> & target_loss_rate_interval,
                               const std::string & output_dir,
                               const std::string & probing_type,
-                              std::unordered_map<IPv4Address, int> & triggering_rates){
+                              std::unordered_map<std::string, int> & triggering_rates){
 
         const auto & first_candidate_probe_infos = probes_infos[0];
-        auto real_target = probe_infos.get_real_target4();
+
+
+        auto real_target = std::string("");
+        if (first_candidate_probe_infos.get_family() == PDU::PDUType::IP){
+            real_target = first_candidate_probe_infos.get_real_target4().to_string();
+        } else if (first_candidate_probe_infos.get_family() == PDU::PDUType::IPv6){
+            real_target = first_candidate_probe_infos.get_real_target6().to_string();
+        }
         auto icmp_type = probe_infos.icmp_type_str();
 
-
-
-        // Find the probing rate that triggered the target loss rate.
-        std::unordered_map<IPv4Address, IP> matchers;
-        matchers.insert(std::make_pair(probe_infos.get_real_target4(),
-                                       probe_infos.get_packet4()));
 
         auto is_binary_search = false;
         auto probing_rate = starting_probing_rate;
@@ -137,13 +138,13 @@ namespace utils{
                                 probing_type,
                                 probing_rate);
             } else if (probing_type == "INDIVIDUAL"){
-                pcap_file = build_pcap_name(output_dir, icmp_type, real_target.to_string(), probing_type,
+                pcap_file = build_pcap_name(output_dir, icmp_type, real_target, probing_type,
                                             probing_rate);
             }
 
 
             // Start the analysis of responsiveness.
-            rate_limit_analyzer_t rate_limit_analyzer(probe_infos.get_probing_style(), matchers);
+            auto rate_limit_analyzer = rate_limit_analyzer_t::build_rate_limit_analyzer_t_from_probe_infos(probes_infos);
             std::cout << "Analyzing " << pcap_file << "\n";
             try {
                 rate_limit_analyzer.start(pcap_file);

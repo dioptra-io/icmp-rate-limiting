@@ -29,6 +29,7 @@ public:
 
     const Tins::IPv6Address &get_real_target6() const;
 
+    std::string get_real_target() const;
 
     Tins::PDU::PDUType get_protocol() const;
     utils::probing_style_t get_probing_style() const;

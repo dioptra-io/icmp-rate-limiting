@@ -26,21 +26,61 @@ namespace{
                                         "library(changepoint.np);");
 
     bool already_loaded = false;
-
     struct compare_icmp_packet{
-        bool operator() (const Packet & packet1, const Packet & packet2){
-            auto icmp1 = packet1.pdu()->template rfind_pdu<ICMP>();
-            auto icmp2 = packet2.pdu()->template rfind_pdu<ICMP>();
+        bool operator() (const Packet & packet1, const Packet & packet2) const {
+            auto icmp1 = packet1.pdu()->template find_pdu<ICMP>();
+            auto icmp2 = packet2.pdu()->template find_pdu<ICMP>();
 
+            auto icmp61 = packet1.pdu()->template find_pdu<ICMPv6>();
+            auto icmp62 = packet1.pdu()->template find_pdu<ICMPv6>();
+
+
+            if (icmp1 != nullptr && icmp2 != nullptr){
+                return this->operator()(*icmp1, *icmp2);
+            }
+            else if (icmp61 != nullptr && icmp2 != nullptr){
+                return this->operator()(*icmp2, *icmp61);
+            } else if (icmp1 != nullptr && icmp62 != nullptr){
+                return this->operator()(*icmp1, *icmp62);
+            } else if (icmp61 != nullptr && icmp62 != nullptr){
+                return this->operator()(*icmp61, *icmp62);
+            }
+            std::cerr << "Not comparing ICMP packets\n";
+            return false;
+        }
+
+        bool operator()(const ICMP & icmp1, const ICMP & icmp2 ) const {
             if (icmp1.id() != icmp2.id()){
                 return icmp1.id() < icmp2.id();
             } else {
                 return icmp1.sequence() < icmp2.sequence();
             }
-        };
+        }
+
+        bool operator()(const ICMP & icmp1, const ICMPv6 & icmp2 ) const {
+            if (icmp1.id() != icmp2.identifier()){
+                return icmp1.id() < icmp2.identifier();
+            } else {
+                return icmp1.sequence() < icmp2.sequence();
+            }
+        }
+
+        bool operator()(const ICMPv6 & icmp1, const ICMPv6 & icmp2 ) const {
+            if (icmp1.identifier() != icmp2.identifier()){
+                return icmp1.identifier() < icmp2.identifier();
+            } else {
+                return icmp1.sequence() < icmp2.sequence();
+            }
+        }
+
+
     };
 }
 
+
+rate_limit_analyzer_t::rate_limit_analyzer_t() {
+    // Default constructor
+}
 
 
 rate_limit_analyzer_t::rate_limit_analyzer_t(probing_style_t probing_style, PDU::PDUType family) :
@@ -67,6 +107,15 @@ rate_limit_analyzer_t::rate_limit_analyzer_t(probing_style_t probing_style,
 
 }
 
+rate_limit_analyzer_t::rate_limit_analyzer_t(utils::probing_style_t probing_style,
+                                             const std::unordered_map<Tins::IPv4Address, Tins::IP> &matchers4,
+                                             const std::unordered_map<Tins::IPv6Address, Tins::IPv6> &matchers6):
+    probing_style(probing_style),
+    matchers4(matchers4),
+    matchers6(matchers6)
+{
+
+}
 
 void rate_limit_analyzer_t::sort_by_timestamp(std::vector<Packet> & packets){
     std::sort(packets.begin(), packets.end(), [](const Packet & packet1, const Packet & packet2){
@@ -89,17 +138,9 @@ double rate_limit_analyzer_t::compute_loss_rate(const std::vector<responsive_inf
     return nb_unresponsive_probes / total_probes;
 }
 
-std::unordered_map<Tins::IPv4Address, double> rate_limit_analyzer_t::compute_loss_rate4() {
-    std::unordered_map<IPv4Address, double> result;
-    std::for_each(packets_per_interface4.begin(), packets_per_interface4.end(), [this, &result](const auto & packets_interface_pair){
-        result.insert(std::make_pair(packets_interface_pair.first, this->compute_loss_rate(packets_interface_pair.second)));
-    });
-    return result;
-}
-
-std::unordered_map<Tins::IPv6Address, double> rate_limit_analyzer_t::compute_loss_rate6() {
-    std::unordered_map<IPv6Address, double> result;
-    std::for_each(packets_per_interface6.begin(), packets_per_interface6.end(), [this, &result](const auto & packets_interface_pair){
+std::unordered_map<std::string, double> rate_limit_analyzer_t::compute_loss_rate() {
+    std::unordered_map<std::string, double> result;
+    std::for_each(packets_per_interface.begin(), packets_per_interface.end(), [this, &result](const auto & packets_interface_pair){
         result.insert(std::make_pair(packets_interface_pair.first, this->compute_loss_rate(packets_interface_pair.second)));
     });
     return result;
@@ -147,20 +188,10 @@ rate_limit_analyzer_t::time_series_t rate_limit_analyzer_t::extract_responsivene
     return time_series;
 }
 
-std::unordered_map<IPv4Address, rate_limit_analyzer_t::time_series_t>
-rate_limit_analyzer_t::extract_responsiveness_time_series4() {
-    std::unordered_map<IPv4Address, rate_limit_analyzer_t::time_series_t> time_series_by_ip;
-    std::for_each(packets_per_interface4.begin(), packets_per_interface4.end(), [&time_series_by_ip, this](const auto & packets_per_ip){
-        time_series_by_ip.insert(std::make_pair(packets_per_ip.first, this->extract_responsiveness_time_series(packets_per_ip.second)));
-    });
-
-    return time_series_by_ip;
-}
-
-std::unordered_map<IPv6Address, rate_limit_analyzer_t::time_series_t>
-rate_limit_analyzer_t::extract_responsiveness_time_series6() {
-    std::unordered_map<IPv6Address, rate_limit_analyzer_t::time_series_t> time_series_by_ip;
-    std::for_each(packets_per_interface6.begin(), packets_per_interface6.end(), [&time_series_by_ip, this](const auto & packets_per_ip){
+std::unordered_map<std::string, rate_limit_analyzer_t::time_series_t>
+rate_limit_analyzer_t::extract_responsiveness_time_series() {
+    std::unordered_map<std::string, rate_limit_analyzer_t::time_series_t> time_series_by_ip;
+    std::for_each(packets_per_interface.begin(), packets_per_interface.end(), [&time_series_by_ip, this](const auto & packets_per_ip){
         time_series_by_ip.insert(std::make_pair(packets_per_ip.first, this->extract_responsiveness_time_series(packets_per_ip.second)));
     });
 
@@ -168,7 +199,7 @@ rate_limit_analyzer_t::extract_responsiveness_time_series6() {
 }
 
 void rate_limit_analyzer_t::dump_time_series() {
-    auto time_series = extract_responsiveness_time_series4();
+    auto time_series = extract_responsiveness_time_series();
 
     std::for_each(time_series.begin(), time_series.end(), [](const auto & time_series_ip){
        std::cout << time_series_ip.first << "\n";
@@ -187,7 +218,7 @@ void rate_limit_analyzer_t::dump_time_series() {
 
 void rate_limit_analyzer_t::dump_loss_rate() {
     std::cout << "Loss rates:" << "\n";
-    auto loss_rates = compute_loss_rate4();
+    auto loss_rates = compute_loss_rate();
     std::for_each(loss_rates.begin(), loss_rates.end(), [](const auto & pair){
         auto ip = pair.first;
         auto loss_rate = pair.second;
@@ -236,71 +267,99 @@ rate_limit_estimate_t rate_limit_analyzer_t::compute_mean_stddev(const time_seri
     return estimation;
 }
 
+
 void rate_limit_analyzer_t::start(const std::string &pcap_file)  {
 
     // v4 or v6
 
-//    auto src_address = NetworkInterface::default_interface().ipv4_address();
-    IPv4Address src_address;
-    auto build_series4 = [this, &src_address](Tins::Packet & packet){
+//    auto src_address4 = NetworkInterface::default_interface().ipv4_address();
+    IPv4Address src_address4;
+    IPv6Address src_address6;
+    auto build_series = [this, &src_address4, &src_address6](Tins::Packet & packet){
+        bool is_v4_packet = false;
+        bool is_v6_packet = false;
         auto pdu = packet.pdu();
         auto ip = pdu->find_pdu<IP>();
-        auto icmp = pdu->find_pdu<ICMP>();
+        auto ipv6 = pdu->find_pdu<IPv6>();
+        if (ip != nullptr){
+            is_v4_packet = true;
+        }
+        if (ipv6){
+            is_v6_packet = true;
+        }
+        if (is_v4_packet){
+            auto icmp = pdu->find_pdu<ICMP>();
+            if (src_address4 == IPv4Address()){
+                if (icmp != nullptr && icmp->type() == ICMP::Flags ::ECHO_REQUEST){
+                    src_address4 = ip->src_addr();
+                }
+            }
 
-        if (src_address == "0.0.0.0"){
-            if (icmp != nullptr && icmp->type() == ICMP::Flags ::ECHO_REQUEST){
-                src_address = ip->src_addr();
+            if (ip->src_addr() == src_address4){
+                // This packet was destinated to another address
+                auto it = this->matchers4.find(ip->dst_addr());
+                if (it == this->matchers4.end()){
+                    // Do nothing
+                    return true;
+                }
+            }
+
+            // This packet was from another address
+            if (ip->dst_addr() == src_address4){
+                auto it = this->matchers4.find(ip->src_addr());
+                if (it == this->matchers4.end()){
+                    // Do nothing
+                    return true;
+                }
+            }
+
+
+
+            if (icmp == NULL or icmp->type() == ICMP::Flags::ECHO_REQUEST){
+                outgoing_packets.push_back(packet);
+            } else {
+                icmp_replies.push_back(packet);
+            }
+        }
+        else if (is_v6_packet){
+            auto icmpv6 = pdu->find_pdu<ICMPv6>();
+            if (src_address6 == IPv6Address()){
+                if (icmpv6 != nullptr && icmpv6->type() == ICMPv6::Types::ECHO_REQUEST){
+                    src_address6 = ipv6->src_addr();
+                }
+            }
+
+
+            if (ipv6->src_addr() == src_address6){
+                // This packet was destinated to another address
+                auto it = this->matchers6.find(ipv6->dst_addr());
+                if (it == this->matchers6.end()){
+                    // Do nothing
+                    return true;
+                }
+            }
+
+            // This packet was from another address
+            if (ipv6->dst_addr() == src_address6){
+                auto it = this->matchers6.find(ipv6->src_addr());
+                if (it == this->matchers6.end()){
+                    // Do nothing
+                    return true;
+                }
+            }
+
+            if (icmpv6 == NULL or icmpv6->type() == ICMPv6::Types ::ECHO_REQUEST){
+                outgoing_packets.push_back(packet);
+            } else {
+                icmp_replies.push_back(packet);
             }
         }
 
-        if (ip->src_addr() == src_address){
-            // This packet was destinated to another address
-            auto it = this->matchers4.find(ip->dst_addr());
-            if (it == this->matchers4.end()){
-                // Do nothing
-                return true;
-            }
-        }
-
-
-        // This packet was from another address
-        if (ip->dst_addr() == src_address){
-            auto it = this->matchers4.find(ip->src_addr());
-            if (it == this->matchers4.end()){
-                // Do nothing
-                return true;
-            }
-        }
-
-        if (icmp == NULL or icmp->type() == Tins::ICMP::Flags::ECHO_REQUEST){
-            outgoing_packets.push_back(packet);
-        } else {
-            icmp_replies.push_back(packet);
-        }
         return true;
     };
 
-    auto build_series6 = [this](Tins::Packet & packet){
-        auto pdu = packet.pdu();
-        auto icmp = pdu->find_pdu<ICMPv6>();
-        if (icmp == NULL or icmp->type() == Tins::ICMPv6::Types::ECHO_REQUEST){
-            outgoing_packets.push_back(packet);
-        } else {
-            icmp_replies.push_back(packet);
-        }
-        return true;
-    };
-
-    bool is_v4 = false;
-    bool is_v6 = false;
     Tins::FileSniffer sniffer(pcap_file);
-    if (ip_family == PDU::PDUType::IP){
-        sniffer.sniff_loop(build_series4);
-        is_v4 = true;
-    } else if (ip_family == PDU::PDUType::IPv6){
-        sniffer.sniff_loop(build_series6);
-        is_v6 = true;
-    }
+    sniffer.sniff_loop(build_series);
 
     // Matches probe with replies and extract responsiveness
     sort_by_timestamp(outgoing_packets);
@@ -315,85 +374,85 @@ void rate_limit_analyzer_t::start(const std::string &pcap_file)  {
     if (!outgoing_packets.empty()){
         outgoing_packets.erase(outgoing_packets.end()-1);
     }
-    if (is_v4){
-        for(const auto & packet : outgoing_packets){
-            auto outgoing_pdu = packet.pdu();
-            // Find the IP layer
+    for(const auto & packet : outgoing_packets){
+        auto outgoing_pdu = packet.pdu();
+        // Find the IP layer
 
-            auto ip = outgoing_pdu->rfind_pdu<IP>();
+        auto ip = outgoing_pdu->find_pdu<IP>();
+        auto ip6 = outgoing_pdu->find_pdu<IPv6>();
 
+        auto range = std::equal_range(icmp_replies.begin(), icmp_replies.end(), packet, compare_icmp_packet());
+        auto dist = std::distance(range.first, range.second);
+        if (ip != nullptr){
 
-            auto range = std::equal_range(icmp_replies.begin(), icmp_replies.end(), packet, compare_icmp_packet());
-
-            auto dist = std::distance(range.first, range.second);
             // Find the matching reply if existing.
             auto it = std::find_if(range.first, range.second,
-                    [&ip](const Tins::Packet & matching_packet){
+                                   [&ip](const Tins::Packet & matching_packet){
 
 
-                auto pdu = matching_packet.pdu();
-                auto reply_ip = pdu->find_pdu<IP>();
-                auto icmp = pdu->find_pdu<ICMP>();
+                                       auto pdu = matching_packet.pdu();
+                                       auto reply_ip = pdu->find_pdu<IP>();
+                                       auto icmp = pdu->find_pdu<ICMP>();
 
-                // We assume direct probing so check only the source
+                                       // We assume direct probing so check only the source
 
-                // Check first the destination
-                auto destination = ip.dst_addr();
-                if (destination != reply_ip->src_addr()){
-                    return false;
-                }
+                                       // Check first the destination
+                                       auto destination = ip->dst_addr();
+                                       if (destination != reply_ip->src_addr()){
+                                           return false;
+                                       }
 
-                if (icmp->type() == Tins::ICMP::Flags::ECHO_REPLY){
-                    try{
-                        // We are in an ICMP direct probing so we match se probes with the icmp sequence number
-                        auto icmp_request = ip.find_pdu<ICMP>();
-                        if (icmp_request != nullptr){
-                            if (icmp->sequence() == icmp_request->sequence() && icmp->id() == icmp_request->id()){
-                                return true;
-                            }
-                        }
+                                       if (icmp->type() == Tins::ICMP::Flags::ECHO_REPLY){
+                                           try{
+                                               // We are in an ICMP direct probing so we match se probes with the icmp sequence number
+                                               auto icmp_request = ip->find_pdu<ICMP>();
+                                               if (icmp_request != nullptr){
+                                                   if (icmp->sequence() == icmp_request->sequence() && icmp->id() == icmp_request->id()){
+                                                       return true;
+                                                   }
+                                               }
 
-                    } catch (const Tins::malformed_packet & e){
-                        std::cerr << e.what() << "\n";
-                    }
+                                           } catch (const Tins::malformed_packet & e){
+                                               std::cerr << e.what() << "\n";
+                                           }
 
 
-                } else {
-                    // We are in a TCP or UDP probing so match with the probes with the ip id
-                    try{
-                        const auto &raw_inner_transport = icmp->rfind_pdu<Tins::RawPDU>();
-                        auto inner_ip = raw_inner_transport.to<Tins::IP>();
-                        if (inner_ip.id() == ip.id()){
-                            return true;
-                        }
-                    } catch (const Tins::malformed_packet & e){
-                        std::cerr << e.what() << "\n";
-                    }
-                }
-                return false;
-            });
+                                       } else {
+                                           // We are in a TCP or UDP probing so match with the probes with the ip id
+                                           try{
+                                               const auto &raw_inner_transport = icmp->rfind_pdu<Tins::RawPDU>();
+                                               auto inner_ip = raw_inner_transport.to<Tins::IP>();
+                                               if (inner_ip.id() == ip->id()){
+                                                   return true;
+                                               }
+                                           } catch (const Tins::malformed_packet & e){
+                                               std::cerr << e.what() << "\n";
+                                           }
+                                       }
+                                       return false;
+                                   });
             if (it != range.second){
                 auto ip_reply = it->pdu()->template rfind_pdu<Tins::IP>().src_addr();
                 // Erase this response.
 
 //                std::cout << "Responsive " << ip_reply << " " <<  std::chrono::microseconds(packet.timestamp()).count() << "\n";
                 // Insert the reply in the responsiveness map
-                auto ip_key = packets_per_interface4.find(ip_reply);
-                if (ip_key == packets_per_interface4.end()) {
-                    packets_per_interface4.insert(std::make_pair(ip_reply, std::vector<responsive_info_probe_t>()));
+                auto ip_key = packets_per_interface.find(ip_reply.to_string());
+                if (ip_key == packets_per_interface.end()) {
+                    packets_per_interface.insert(std::make_pair(ip_reply.to_string(), std::vector<responsive_info_probe_t>()));
                 }
-                packets_per_interface4[ip_reply].push_back(std::make_pair(true, packet));
+                packets_per_interface[ip_reply.to_string()].push_back(std::make_pair(true, packet));
 
                 icmp_replies.erase(it);
             } else {
                 Tins::IPv4Address dst_ip;
                 if (probing_style == probing_style_t::DIRECT){
                     // Match the ip probe with the destination in case of direct probing
-                    dst_ip = ip.dst_addr();
+                    dst_ip = ip->dst_addr();
                 } else if (probing_style == probing_style_t::INDIRECT){
                     // Match the ip probe with the sport in case of indirect probing
                     for (const auto & matcher : matchers4){
-                        if (match_probe(matcher.second, ip)){
+                        if (match_probe(matcher.second, *ip)){
                             dst_ip = matcher.first;
                             break;
                         }
@@ -401,103 +460,175 @@ void rate_limit_analyzer_t::start(const std::string &pcap_file)  {
 
                 }
 
-                auto ip_key = packets_per_interface4.find(dst_ip);
-                if (ip_key == packets_per_interface4.end()){
-                    packets_per_interface4.insert(std::make_pair(dst_ip, std::vector<responsive_info_probe_t>()));
+                auto ip_key = packets_per_interface.find(dst_ip.to_string());
+                if (ip_key == packets_per_interface.end()){
+                    packets_per_interface.insert(std::make_pair(dst_ip.to_string(), std::vector<responsive_info_probe_t>()));
                 }
-                packets_per_interface4[dst_ip].push_back(std::make_pair(false, packet));
-//                std::cout << "Unresponsive " << dst_ip << " " <<  std::chrono::microseconds(packet.timestamp()).count() << "\n";
-
+                packets_per_interface[dst_ip.to_string()].push_back(std::make_pair(false, packet));
 
             }
         }
-    }
-
-    else if (is_v6){
-        for(const auto & packet : outgoing_packets) {
-            auto outgoing_pdu = packet.pdu();
-            // Find the IP layer
-            auto ip = outgoing_pdu->rfind_pdu<IPv6>();
-
-            auto it = std::find_if(icmp_replies.begin(), icmp_replies.end(), [&ip](const Tins::Packet & matching_packet){
-                auto pdu = matching_packet.pdu();
-                auto icmp = pdu->find_pdu<Tins::ICMPv6>();
-
-                auto reply_ip = pdu->find_pdu<IPv6>();
-
-                // We assume direct probing so check only the source
-
-                // Check first the destination
-                auto destination = ip.dst_addr();
-                if (destination != reply_ip->src_addr()){
-                    return false;
-                }
-
-                if (icmp->type() == Tins::ICMPv6::Types::ECHO_REPLY){
-                    try{
-                        // We are in an ICMP direct probing so we match se probes with the icmp id
-                        auto icmp_request = ip.find_pdu<ICMPv6>();
-                        if (icmp_request != nullptr){
-                            if (icmp->sequence() == icmp_request->sequence()){
-                                return true;
-                            }
-                        }
-
-                    } catch (const Tins::malformed_packet & e){
-                        std::cerr << e.what() << "\n";
-                    }
+        else if (ip6 != nullptr){
+            // Find the matching reply if existing.
+            auto it = std::find_if(range.first, range.second,
+                                   [&ip6](const Tins::Packet & matching_packet){
 
 
-                } else {
-                    // We are in a TCP or UDP probing so match with the probes with the ip id
-                    //TODO
-                }
-                return false;
-            });
+                                       auto pdu = matching_packet.pdu();
+                                       auto reply_ip = pdu->find_pdu<IPv6>();
+                                       auto icmp = pdu->find_pdu<ICMPv6>();
 
-            if (it != icmp_replies.end()){
-                auto ip_reply = it->pdu()->template rfind_pdu<IPv6>().src_addr();
+                                       // We assume direct probing so check only the source
+
+                                       // Check first the destination
+                                       auto destination = ip6->dst_addr();
+                                       if (destination != reply_ip->src_addr()){
+                                           return false;
+                                       }
+
+                                       if (icmp->type() == ICMPv6::Types::ECHO_REPLY){
+                                           try{
+                                               // We are in an ICMP direct probing so we match se probes with the icmp sequence number
+                                               auto icmp_request = ip6->find_pdu<ICMPv6>();
+                                               if (icmp_request != nullptr){
+                                                   if (icmp->sequence() == icmp_request->sequence()
+                                                       && icmp->identifier() == icmp_request->identifier()){
+                                                       return true;
+                                                   }
+                                               }
+
+                                           } catch (const Tins::malformed_packet & e){
+                                               std::cerr << e.what() << "\n";
+                                           }
+
+
+                                       } else {
+                                           // We are in a TCP or UDP probing so match with the probes with the ip id
+
+                                       }
+                                       return false;
+                                   });
+            if (it != range.second){
+                auto ip_reply = it->pdu()->template rfind_pdu<Tins::IPv6>().src_addr();
                 // Erase this response.
 
 //                std::cout << "Responsive " << ip_reply << " " <<  std::chrono::microseconds(packet.timestamp()).count() << "\n";
                 // Insert the reply in the responsiveness map
-                auto ip_key = packets_per_interface6.find(ip_reply);
-                if (ip_key == packets_per_interface6.end()) {
-                    packets_per_interface6.insert(std::make_pair(ip_reply, std::vector<responsive_info_probe_t>()));
+                auto ip_key = packets_per_interface.find(ip_reply.to_string());
+                if (ip_key == packets_per_interface.end()) {
+                    packets_per_interface.insert(std::make_pair(ip_reply.to_string(), std::vector<responsive_info_probe_t>()));
                 }
-                packets_per_interface6[ip_reply].push_back(std::make_pair(true, packet));
+                packets_per_interface[ip_reply.to_string()].push_back(std::make_pair(true, packet));
 
                 icmp_replies.erase(it);
             } else {
-                Tins::IPv6Address dst_ip;
+                IPv6Address dst_ip;
                 if (probing_style == probing_style_t::DIRECT){
                     // Match the ip probe with the destination in case of direct probing
-                    dst_ip = ip.dst_addr();
-                }
-                else if (probing_style == probing_style_t::INDIRECT){
-                    //TODO v6 does not handle yet indirect
-//                    // Match the ip probe with the sport in case of indirect probing
-//                    for (const auto & matcher : matchers6){
-//                        if (match_probe(matcher.second, ip)){
-//                            dst_ip = matcher.first;
-//                            break;
-//                        }
-//                    }
+                    dst_ip = ip6->dst_addr();
+                } else if (probing_style == probing_style_t::INDIRECT){
 
                 }
 
-                auto ip_key = packets_per_interface6.find(dst_ip);
-                if (ip_key == packets_per_interface6.end()){
-                    packets_per_interface6.insert(std::make_pair(dst_ip, std::vector<responsive_info_probe_t>()));
+                auto ip_key = packets_per_interface.find(dst_ip.to_string());
+                if (ip_key == packets_per_interface.end()){
+                    packets_per_interface.insert(std::make_pair(dst_ip.to_string(), std::vector<responsive_info_probe_t>()));
                 }
-                packets_per_interface6[dst_ip].push_back(std::make_pair(false, packet));
-//                std::cout << "Unresponsive " << dst_ip << " " <<  std::chrono::microseconds(packet.timestamp()).count() << "\n";
-
+                packets_per_interface[dst_ip.to_string()].push_back(std::make_pair(false, packet));
 
             }
-
         }
     }
+
+
+
+
+
+//    else if (is_v6){
+//        for(const auto & packet : outgoing_packets) {
+//            auto outgoing_pdu = packet.pdu();
+//            // Find the IP layer
+//            auto ip = outgoing_pdu->rfind_pdu<IPv6>();
+//
+//            auto it = std::find_if(icmp_replies.begin(), icmp_replies.end(), [&ip](const Tins::Packet & matching_packet){
+//                auto pdu = matching_packet.pdu();
+//                auto icmp = pdu->find_pdu<Tins::ICMPv6>();
+//
+//                auto reply_ip = pdu->find_pdu<IPv6>();
+//
+//                // We assume direct probing so check only the source
+//
+//                // Check first the destination
+//                auto destination = ip.dst_addr();
+//                if (destination != reply_ip->src_addr()){
+//                    return false;
+//                }
+//
+//                if (icmp->type() == Tins::ICMPv6::Types::ECHO_REPLY){
+//                    try{
+//                        // We are in an ICMP direct probing so we match se probes with the icmp id
+//                        auto icmp_request = ip.find_pdu<ICMPv6>();
+//                        if (icmp_request != nullptr){
+//                            if (icmp->sequence() == icmp_request->sequence()){
+//                                return true;
+//                            }
+//                        }
+//
+//                    } catch (const Tins::malformed_packet & e){
+//                        std::cerr << e.what() << "\n";
+//                    }
+//
+//
+//                } else {
+//                    // We are in a TCP or UDP probing so match with the probes with the ip id
+//                    //TODO
+//                }
+//                return false;
+//            });
+//
+//            if (it != icmp_replies.end()){
+//                auto ip_reply = it->pdu()->template rfind_pdu<IPv6>().src_addr();
+//                // Erase this response.
+//
+////                std::cout << "Responsive " << ip_reply << " " <<  std::chrono::microseconds(packet.timestamp()).count() << "\n";
+//                // Insert the reply in the responsiveness map
+//                auto ip_key = packets_per_interface6.find(ip_reply);
+//                if (ip_key == packets_per_interface6.end()) {
+//                    packets_per_interface6.insert(std::make_pair(ip_reply, std::vector<responsive_info_probe_t>()));
+//                }
+//                packets_per_interface6[ip_reply].push_back(std::make_pair(true, packet));
+//
+//                icmp_replies.erase(it);
+//            } else {
+//                Tins::IPv6Address dst_ip;
+//                if (probing_style == probing_style_t::DIRECT){
+//                    // Match the ip probe with the destination in case of direct probing
+//                    dst_ip = ip.dst_addr();
+//                }
+//                else if (probing_style == probing_style_t::INDIRECT){
+//                    //TODO v6 does not handle yet indirect
+////                    // Match the ip probe with the sport in case of indirect probing
+////                    for (const auto & matcher : matchers6){
+////                        if (match_probe(matcher.second, ip)){
+////                            dst_ip = matcher.first;
+////                            break;
+////                        }
+////                    }
+//
+//                }
+//
+//                auto ip_key = packets_per_interface.find(dst_ip);
+//                if (ip_key == packets_per_interface.end()){
+//                    packets_per_interface6.insert(std::make_pair(dst_ip, std::vector<responsive_info_probe_t>()));
+//                }
+//                packets_per_interface6[dst_ip].push_back(std::make_pair(false, packet));
+////                std::cout << "Unresponsive " << dst_ip << " " <<  std::chrono::microseconds(packet.timestamp()).count() << "\n";
+//
+//
+//            }
+//
+//        }
+//    }
 
 }
 
@@ -590,24 +721,23 @@ void rate_limit_analyzer_t::dump_transition_matrix(const gilbert_elliot_t &loss_
     std::cout << "P(U, U) = " << loss_model.transition(1, 1) << "\n";
 }
 
-rate_limit_analyzer_t::time_series_t rate_limit_analyzer_t::get_responsiveness(const Tins::IPv4Address & address) {
-    return extract_responsiveness_time_series(packets_per_interface4[address]);
+rate_limit_analyzer_t::time_series_t rate_limit_analyzer_t::get_responsiveness(const std::string & address) {
+    return extract_responsiveness_time_series(packets_per_interface[address]);
 }
 
-double rate_limit_analyzer_t::compute_loss_rate(const IPv4Address & ip) const {
-    return compute_loss_rate(packets_per_interface4.at(ip));
+
+double rate_limit_analyzer_t::compute_loss_rate(const std::string & ip) const {
+    return compute_loss_rate(packets_per_interface.at(ip));
 }
 
-double rate_limit_analyzer_t::compute_loss_rate(const IPv6Address & ip) const {
-    return compute_loss_rate(packets_per_interface6.at(ip));
-}
 
-std::vector<responsive_info_probe_t> rate_limit_analyzer_t::get_raw_packets4(const IPv4Address &ip) const {
+
+std::vector<responsive_info_probe_t> rate_limit_analyzer_t::get_raw_packets(const std::string &ip) const {
     try {
-        return packets_per_interface4.at(ip);
+        return packets_per_interface.at(ip);
     } catch (const std::out_of_range & e){
         std::cerr << "Keys found:\n";
-        for (const auto & pair : packets_per_interface4){
+        for (const auto & pair : packets_per_interface){
             std::cerr << pair.first << "\n";
         }
         std::cerr << "Was looking for key " << ip << "\n";
@@ -616,59 +746,12 @@ std::vector<responsive_info_probe_t> rate_limit_analyzer_t::get_raw_packets4(con
     return std::vector<responsive_info_probe_t>();
 }
 
-std::vector<responsive_info_probe_t> rate_limit_analyzer_t::get_raw_packets6(const IPv6Address &ip) const {
-    try {
-        return packets_per_interface6.at(ip);
-    } catch (const std::out_of_range & e){
-        std::cerr << "Keys found:\n";
-        for (const auto & pair : packets_per_interface6){
-            std::cerr << pair.first << "\n";
-        }
-        std::cerr << "Was looking for key " << ip << "\n";
-        std::cerr << "Error: May be network dynamics.\n";
-    }
-    return std::vector<responsive_info_probe_t>();
-}
-
-gilbert_elliot_t rate_limit_analyzer_t::compute_loss_model4(const Tins::IPv4Address &address) const{
-    return compute_loss_model(packets_per_interface4.at(address));
-}
-
-gilbert_elliot_t rate_limit_analyzer_t::compute_loss_model6(const Tins::IPv6Address &address) const{
-    return compute_loss_model(packets_per_interface6.at(address));
+gilbert_elliot_t rate_limit_analyzer_t::compute_loss_model(const std::string &address) const{
+    return compute_loss_model(packets_per_interface.at(address));
 }
 
 int rate_limit_analyzer_t::compute_icmp_change_point(
         const std::vector<responsive_info_probe_t> &data) const {
-//    double global_loss_rate_treshold = 0.12;
-//    double loss_rate_treshold = 0.2;
-//    int interval_length = 100;
-//
-//    int triggering_loss_rate = -1;
-//
-//    auto global_loss_rate = compute_loss_rate(data);
-//    if (global_loss_rate > global_loss_rate_treshold) {
-//        for (int i = 0; i < data.size() - interval_length; i += interval_length / 2) {
-//            decltype(data.begin()) last_index;
-//            if ((i + 2 * interval_length) < data.size()) {
-//                last_index = data.begin() + i + interval_length;
-//            } else {
-//                break;
-//            }
-//
-//            std::vector<responsive_info_probe_t> responsiveness_interval(data.begin() + i, last_index);
-//            auto loss_rate_interval = compute_loss_rate(responsiveness_interval);
-//
-//            if (loss_rate_interval > loss_rate_treshold) {
-//                triggering_loss_rate = i;
-//                break;
-//            }
-//        }
-//    }
-//    if (triggering_loss_rate == -1){
-//        return std::make_pair(triggering_loss_rate, triggering_loss_rate);
-//    }
-//    return std::make_pair(triggering_loss_rate, triggering_loss_rate + interval_length);
 
     // Early return if data is empty
     if (data.empty()){
@@ -703,10 +786,10 @@ int rate_limit_analyzer_t::compute_icmp_change_point(
 
 }
 
-std::unordered_map<IPv4Address, int>
-rate_limit_analyzer_t::compute_icmp_change_point4() const {
-    std::unordered_map<IPv4Address, int> icmp_change_point;
-    for (const auto & responsiveness_ip : packets_per_interface4){
+std::unordered_map<std::string, int>
+rate_limit_analyzer_t::compute_icmp_change_point() const {
+    std::unordered_map<std::string, int> icmp_change_point;
+    for (const auto & responsiveness_ip : packets_per_interface){
         auto change_point = compute_icmp_change_point(responsiveness_ip.second);
         icmp_change_point[responsiveness_ip.first] = change_point;
     }
@@ -714,43 +797,25 @@ rate_limit_analyzer_t::compute_icmp_change_point4() const {
 }
 
 int
-rate_limit_analyzer_t::compute_icmp_change_point4(const IPv4Address &ip_address) const {
-    auto raw = packets_per_interface4.at(ip_address);
+rate_limit_analyzer_t::compute_icmp_change_point(const std::string &ip_address) const {
+    auto raw = packets_per_interface.at(ip_address);
     auto change_point = compute_icmp_change_point(raw);
     return change_point;
 }
 
-std::unordered_map<IPv6Address, int>
-rate_limit_analyzer_t::compute_icmp_change_point6() const {
-    std::unordered_map<IPv6Address, int> icmp_change_poiint;
-    for (const auto & responsiveness_ip : packets_per_interface6){
-        auto triggering_rate = compute_icmp_change_point(responsiveness_ip.second);
-        icmp_change_poiint[responsiveness_ip.first] = triggering_rate;
-    }
-    return icmp_change_poiint;
-}
 
-int
-rate_limit_analyzer_t::compute_icmp_change_point6(const IPv6Address &ip_address) const {
-    std::unordered_map<IPv4Address, packet_interval_t> icmp_triggering_rate;
-    auto raw = packets_per_interface6.at(ip_address);
-    auto triggering_rate = compute_icmp_change_point(raw);
-    return triggering_rate;
-}
-
-
-std::string rate_limit_analyzer_t::serialize_raw4() {
+std::string rate_limit_analyzer_t::serialize_raw() {
     int i = 0;
     std::stringstream serialized_raw;
     serialized_raw << "{";
-    for (const auto & address_packets : packets_per_interface4){
+    for (const auto & address_packets : packets_per_interface){
         if (i != 0){
             serialized_raw << ",";
         }
         serialized_raw << "\"";
         serialized_raw << address_packets.first;
         serialized_raw << "\":";
-        serialized_raw << serialize_raw4(address_packets.first);
+        serialized_raw << serialize_raw(address_packets.first);
 
         i += 1;
     }
@@ -759,14 +824,14 @@ std::string rate_limit_analyzer_t::serialize_raw4() {
     return serialized_raw.str();
 }
 
-std::string rate_limit_analyzer_t::serialize_raw4(const Tins::IPv4Address & address) {
+std::string rate_limit_analyzer_t::serialize_raw(const std::string & address) {
 
     int i = 0;
 
     std::stringstream serialized_raw;
     serialized_raw << "[";
 
-    for (const auto & packet : packets_per_interface4.at(address)){
+    for (const auto & packet : packets_per_interface.at(address)){
         if (i != 0){
          serialized_raw << ", ";
         }
@@ -805,18 +870,13 @@ double rate_limit_analyzer_t::correlation(const std::vector<responsive_info_prob
 }
 
 
-double rate_limit_analyzer_t::correlation4(const IPv4Address &ip_address1,
-                                           const IPv4Address &ip_address2) {
-    return correlation(packets_per_interface4[ip_address1], packets_per_interface4[ip_address2]);
+double rate_limit_analyzer_t::correlation(const std::string &ip_address1,
+                                           const std::string &ip_address2) {
+    return correlation(packets_per_interface[ip_address1], packets_per_interface[ip_address2]);
 }
 
-double rate_limit_analyzer_t::correlation6(const IPv6Address &ip_address1,
-                                           const IPv6Address &ip_address2) {
-    return correlation(packets_per_interface6[ip_address1], packets_per_interface6[ip_address2]);
-}
-
-double rate_limit_analyzer_t::correlation_high_low4(const Tins::IPv4Address &high_rate_ip_address,
-                                                    const Tins::IPv4Address &low_rate_ip_address) {
+double rate_limit_analyzer_t::correlation_high_low(const std::string &high_rate_ip_address,
+                                                    const std::string &low_rate_ip_address) {
 
 
     /**
@@ -825,8 +885,8 @@ double rate_limit_analyzer_t::correlation_high_low4(const Tins::IPv4Address &hig
 
     // Adjust number of bits
 
-    auto & packets_high_rate_interface = packets_per_interface4[high_rate_ip_address];
-    auto & packets_low_rate_interface  = packets_per_interface4[low_rate_ip_address];
+    auto & packets_high_rate_interface = packets_per_interface[high_rate_ip_address];
+    auto & packets_low_rate_interface  = packets_per_interface[low_rate_ip_address];
 
     auto n_bits = static_cast<int>(std::round(static_cast<double>(packets_high_rate_interface.size()) / packets_low_rate_interface.size()));
 
@@ -886,74 +946,45 @@ rate_limit_analyzer_t::responsiveness_to_binary(const std::vector<utils::respons
     return binary_responses;
 }
 
-double rate_limit_analyzer_t::correlation_high_low6(const Tins::IPv6Address &high_rate_ip_address,
-                                                    const Tins::IPv6Address &low_rate_ip_address) {
 
-
-    /**
-     * Adjust the number of bits, then compute the correlation.
-     */
-
-    // Adjust number of bits
-
-    auto & packets_high_rate_interface = packets_per_interface6[high_rate_ip_address];
-    auto & packets_low_rate_interface  = packets_per_interface6[low_rate_ip_address];
-
-    auto n_bits = static_cast<int>(std::round(static_cast<double>(packets_high_rate_interface.size()) / packets_low_rate_interface.size()));
-
-
-    std::vector<int> int_bits_high;
-    std::vector<int> int_bits_low;
-
-    // Transform low rate time series to replace 1's by n_bits
-    std::transform(packets_low_rate_interface.begin(), packets_low_rate_interface.end(), std::back_inserter(int_bits_low),
-                   [n_bits](const auto & responsiveness_packet){
-                       if (responsiveness_packet.first){
-                           return n_bits;
-                       }
-                       return 0;
-                   });
-
-    std::transform(packets_high_rate_interface.begin(), packets_high_rate_interface.end(), std::back_inserter(int_bits_high),
-                   [](const auto & responsiveness_packet){
-                       if (responsiveness_packet.first){
-                           return 1;
-                       }
-                       return 0;
-                   });
-
-    std::vector<int> subsequences_high_rate;
-
-    for (int i = 0; i + n_bits < int_bits_high.size(); i += n_bits){
-        // Build subsequences of n_bits
-        auto sum_bits = std::accumulate(int_bits_high.begin() + i, int_bits_high.begin() + i + n_bits, 0);
-        subsequences_high_rate.push_back(sum_bits);
-    }
-
-    auto min_size = std::min(subsequences_high_rate.size(), int_bits_low.size());
-
-    subsequences_high_rate.resize(min_size);
-    int_bits_low.resize(min_size);
-
-    // Compute correlation
-    auto correlation = cov_correlation(subsequences_high_rate, int_bits_low).second;
-
-
-    return correlation;
-}
 
 rate_limit_analyzer_t::rate_limit_analyzer_t(const rate_limit_analyzer_t &other) :
         ip_family (other.ip_family),
         probing_style (other.probing_style),
         matchers4 (other.matchers4),
         matchers6 (other.matchers6),
-        packets_per_interface4 (other.packets_per_interface4),
-        packets_per_interface6 (other.packets_per_interface6),
+        packets_per_interface(other.packets_per_interface),
         outgoing_packets(other.outgoing_packets),
         icmp_replies(other.icmp_replies)
 {
 
 }
+
+rate_limit_analyzer_t rate_limit_analyzer_t::build_rate_limit_analyzer_t_from_probe_infos(const std::vector<probe_infos_t> &probes_infos) {
+    std::unordered_map<IPv4Address, IP> matchers4;
+    std::unordered_map<IPv6Address, IPv6> matchers6;
+
+    rate_limit_analyzer_t rate_limit_analyzer;
+    for (const auto & probe_infos : probes_infos){
+        if (probe_infos.get_family() == PDU::PDUType::IP){
+            matchers4.insert(std::make_pair(probe_infos.get_real_target4(), probe_infos.get_packet4()));
+        } else if (probe_infos.get_family() == PDU::PDUType::IPv6){
+            matchers6.insert(std::make_pair(probe_infos.get_real_target6(), probe_infos.get_packet6()));
+        }
+
+        if (!matchers4.empty()){
+            rate_limit_analyzer = rate_limit_analyzer_t(probe_infos.get_probing_style(), matchers4);
+        } else if(!matchers6.empty()){
+            rate_limit_analyzer = rate_limit_analyzer_t(probe_infos.get_probing_style(), matchers6);
+        }
+    }
+    return rate_limit_analyzer;
+}
+
+
+
+
+
 
 
 

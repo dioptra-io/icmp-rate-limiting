@@ -228,4 +228,30 @@ namespace utils{
         return probes_infos;
     }
 
+
+    std::stringstream build_output_line(const std::string & address,
+                                        const std::string & type,
+                                        int probing_rate,
+                                        int change_behaviour_rate,
+                                        double loss_rate,
+                                        double transition_matrix_0_0,
+                                        double transition_matrix_0_1,
+                                        double transition_matrix_1_0,
+                                        double transition_matrix_1_1,
+                                        const std::unordered_map<std::string, double> & correlations){
+
+        std::stringstream ostream;
+        ostream << address << ", " << type << ", " << probing_rate << ", " <<  change_behaviour_rate << ", " << loss_rate <<", ";
+        ostream << transition_matrix_0_0 << ", "  << transition_matrix_0_1  << ", " << transition_matrix_1_0 << ", " << transition_matrix_1_1;
+        if (type == std::string("GROUPSPR") || type == std::string("GROUPDPR")){
+            for (const auto & correlation_address : correlations){
+                ostream << ", " << correlation_address.first << ": " << correlation_address.second;
+            }
+        }
+
+        ostream << "\n";
+
+
+        return ostream;
+    }
 }

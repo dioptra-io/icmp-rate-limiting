@@ -12,11 +12,11 @@
 
 namespace utils{
     bool compute_next_probing_rate(double loss_rate,
-                                   const Tins::IPv4Address & real_target,
+                                   const std::string & real_target,
                                    std::map<int, double> & loss_rate_by_probing_rate,
                                    int & probing_rate,
                                    int starting_probing_rate,
-                                   std::unordered_map<Tins::IPv4Address, int> & triggering_rates,
+                                   std::unordered_map<std::string, int> & triggering_rates,
                                    const std::pair<double, double> & target_loss_rate_interval,
                                    bool & is_binary_search,
                                    int & binary_search_iteration
@@ -28,11 +28,12 @@ namespace utils{
                               const std::pair<double, double> & target_loss_rate_interval,
                               const std::string & output_dir,
                               const std::string & probing_type,
-                              std::unordered_map<Tins::IPv4Address, int> & triggering_rates);
+                              std::unordered_map<std::string, int> & triggering_rates);
 
     int find_closest_rate(const probe_infos_t & first_candidate_probe_infos,
                           const std::map<int, double> & loss_rate_by_probing_rate,
                           const std::pair<double, double> & target_loss_rate_interval);
+
 
     static auto maximum_probing_rate = std::pow(2, 16) - 1;
     static auto minimum_probing_rate = 512;

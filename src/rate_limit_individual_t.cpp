@@ -10,13 +10,17 @@
 #include <utils/file_utils_t.hpp>
 #include <utils/network_utils_t.hpp>
 #include <algorithm_context_t.hpp>
-
+#include <boost/variant.hpp>
+#include <utils/variant_utils_t.hpp>
 
 using namespace Tins;
 using namespace utils;
 
 
-void rate_limit_individual_t::execute_individual_probes4(
+
+
+
+void rate_limit_individual_t::execute_individual_probes(
         const NetworkInterface & sniff_interface,
         const probe_infos_t &probe_infos,
         int probing_rate,
@@ -24,21 +28,27 @@ void rate_limit_individual_t::execute_individual_probes4(
     // Probing rate represents the number of packets to send in 1 sec
     auto nb_probes = measurement_time * probing_rate;
 
-    rate_limit_test_t<IPv4Address> rate_limit_test(nb_probes, probing_rate, sniff_interface,
-                                                   std::vector<probe_infos_t>(1, probe_infos));
 
+    boost::variant<IPv4Address, IPv6Address> real_target;
+    auto pcap_file_name = std::string{""};
     auto icmp_type = probe_infos.icmp_type_str();
+    auto real_target_str = probe_infos.get_real_target();
 
-    auto real_target = probe_infos.get_real_target4();
-    auto pcap_file_name = build_pcap_name(output_dir_individual, icmp_type, real_target.to_string(), "INDIVIDUAL", probing_rate);
+    real_target_str = boost::apply_visitor(visitor_t<to_string_functor_t>(to_string_functor_t()), real_target);
+    pcap_file_name = build_pcap_name(output_dir_individual, icmp_type,
+                                     real_target_str,
+                                     "INDIVIDUAL",
+                                     probing_rate);
+
+    rate_limit_test_t rate_limit_test(nb_probes, probing_rate, sniff_interface,
+                                                   std::vector<probe_infos_t>(1, probe_infos));
     rate_limit_test.set_pcap_file(pcap_file_name);
-
-    std::cout << "Starting " << icmp_type <<  " for " << real_target.to_string() << " with probing rate " << probing_rate <<  "...\n";
+    std::cout << "Starting " << icmp_type <<  " for " << real_target_str << " with probing rate " << probing_rate <<  "...\n";
     rate_limit_test.start();
 
 }
 
-void rate_limit_individual_t::execute_individual_probes4(
+void rate_limit_individual_t::execute_individual_probes(
         const  std::vector<probe_infos_t> &probes_infos,
         int    starting_probing_rate,
         const std::pair<double, double> & target_loss_rate_interval,
@@ -52,7 +62,7 @@ void rate_limit_individual_t::execute_individual_probes4(
      */
     std::cout << "Proceeding to the individual probing phase...\n";
 
-    std::unordered_map<IPv4Address, int> triggering_rates;
+
 
 //    // Sort probes_infos to put first the candidates.
 //    std::stable_sort(probes_infos.begin(), probes_infos.end(), [](const auto & probe_infos1, const auto & probe_infos2){
@@ -65,19 +75,35 @@ void rate_limit_individual_t::execute_individual_probes4(
 
     auto is_binary_search = false;
 
-    auto real_target = probe_infos.get_real_target4();
+    // Use of boost variant in case C++ 17 is not available...
+    boost::variant<IPv4Address, IPv6Address> real_target;
+    std::unordered_map<std::string, int> triggering_rates;
+
+    auto real_target_str = probe_infos.get_real_target();
+
+    real_target_str = boost::apply_visitor(visitor_t<to_string_functor_t>(to_string_functor_t()), real_target);
+
+
     auto icmp_type = probe_infos.icmp_type_str();
 
     if (options.is_custom_probing_rates){
         for (auto probing_rate: options.custom_probing_rates){
-            execute_individual_probes4(sniff_interface, probe_infos, probing_rate, options.pcap_dir_individual);
+
+            execute_individual_probes(sniff_interface, probe_infos, probing_rate, options.pcap_dir_individual);
             std::this_thread::sleep_for(std::chrono::seconds(measurement_time + 1));
         }
         // Hack here to output the results of all rates for the need of the survey
         for (auto probing_rate : options.custom_probing_rates){
-            auto pcap_file = build_pcap_name(options.pcap_dir_individual, icmp_type, real_target.to_string(), "INDIVIDUAL",
+            auto pcap_file = build_pcap_name(options.pcap_dir_individual, icmp_type,
+                    real_target_str, "INDIVIDUAL",
                                              probing_rate);
-            auto ostream = analyse_individual_probes4(probe_infos, probing_rate, pcap_file, algorithm_context);
+            auto ostream = std::stringstream();
+            if (probe_infos.get_family() == PDU::PDUType::IPv6){
+                ostream = analyse_individual_probes(probe_infos, probing_rate, pcap_file, algorithm_context);
+            } else {
+                ostream = analyse_individual_probes(probe_infos, probing_rate, pcap_file, algorithm_context);
+            }
+
             algorithm_context.get_ostream() << ostream.str();
         }
         return;
@@ -97,29 +123,28 @@ void rate_limit_individual_t::execute_individual_probes4(
             break;
         }
 
-        execute_individual_probes4(sniff_interface, probe_infos, probing_rate, options.pcap_dir_individual);
-        std::unordered_map<IPv4Address, IP> matchers;
-        matchers.insert(std::make_pair(probe_infos.get_real_target4(), probe_infos.get_packet4()));
+        execute_individual_probes(sniff_interface, probe_infos, probing_rate, options.pcap_dir_individual);
 
-        rate_limit_analyzer_t rate_limit_analyzer{probe_infos.get_probing_style(), matchers};
+        std::vector<probe_infos_t> v;
+        v.push_back(probe_infos);
+        auto rate_limit_analyzer = rate_limit_analyzer_t::build_rate_limit_analyzer_t_from_probe_infos(v);
 
-
-        auto pcap_file = build_pcap_name(options.pcap_dir_individual, icmp_type, real_target.to_string(), "INDIVIDUAL",
+        auto pcap_file = build_pcap_name(options.pcap_dir_individual, icmp_type, real_target_str, "INDIVIDUAL",
                                          probing_rate);
-
         rate_limit_analyzer.start(pcap_file);
+
         algorithm_context.get_analyzed_pcap_file()[pcap_file] = std::make_unique<rate_limit_analyzer_t>(rate_limit_analyzer);
 
-        auto loss_rate = rate_limit_analyzer.compute_loss_rate(real_target);
+        auto loss_rate = rate_limit_analyzer.compute_loss_rate(real_target_str);
         bool continue_probing = compute_next_probing_rate(loss_rate,
-                                  real_target,
-                                  loss_rate_by_probing_rate,
-                                  probing_rate,
-                                  starting_probing_rate,
-                                  triggering_rates,
-                                  target_loss_rate_interval,
-                                  is_binary_search,
-                                  binary_search_iteration);
+                                                          real_target_str,
+                                                          loss_rate_by_probing_rate,
+                                                          probing_rate,
+                                                          starting_probing_rate,
+                                                          triggering_rates,
+                                                          target_loss_rate_interval,
+                                                          is_binary_search,
+                                                          binary_search_iteration);
 
         if (!continue_probing){
             break;
@@ -129,42 +154,43 @@ void rate_limit_individual_t::execute_individual_probes4(
     }
 
     if (!options.first_only){
-        auto has_found_triggering_rate = triggering_rates.find(real_target) != triggering_rates.end();
+        auto has_found_triggering_rate = triggering_rates.find(real_target_str) != triggering_rates.end();
         // In case no triggering rate has been found, take the closest value to the triggering rate of the first candidate
         // If it is the first candidate, take the probing rate that did bring the closest loss rate from the interval.
         if (!has_found_triggering_rate) {
             auto closest_probing_rate = find_closest_rate(probes_infos[0], loss_rate_by_probing_rate, target_loss_rate_interval);
-            triggering_rates[real_target] = closest_probing_rate;
+            triggering_rates[real_target_str] = closest_probing_rate;
         }
 
         for (int i = 1; i < probes_infos.size(); ++i){
             std::this_thread::sleep_for(std::chrono::seconds(measurement_time + 1));
-            execute_individual_probes4(sniff_interface, probes_infos[i], minimum_probing_rate, options.pcap_dir_individual);
+            execute_individual_probes(sniff_interface, probes_infos[i], minimum_probing_rate, options.pcap_dir_individual);
         }
 
         for (int i = 1; i < probes_infos.size(); ++i){
             std::this_thread::sleep_for(std::chrono::seconds(measurement_time + 1));
-            execute_individual_probes4(sniff_interface, probes_infos[i], triggering_rates[probe_infos.get_real_target4()], options.pcap_dir_individual);
+            execute_individual_probes(sniff_interface, probes_infos[i], triggering_rates[real_target_str], options.pcap_dir_individual);
         }
     }
     else{
         // Hack here to output the results of all rates for the need of the survey
         for (const auto & probing_rate_loss_rate : loss_rate_by_probing_rate){
-            auto pcap_file = build_pcap_name(options.pcap_dir_individual, icmp_type, real_target.to_string(), "INDIVIDUAL",
+            auto pcap_file = build_pcap_name(options.pcap_dir_individual, icmp_type, real_target_str, "INDIVIDUAL",
                                              probing_rate_loss_rate.first);
-            auto ostream = analyse_individual_probes4(probe_infos, probing_rate_loss_rate.first, pcap_file, algorithm_context);
+            auto ostream = analyse_individual_probes(probe_infos, probing_rate_loss_rate.first, pcap_file, algorithm_context);
             algorithm_context.get_ostream() << ostream.str();
         }
     }
 
 
-    auto result_triggering_rate = triggering_rates[real_target];
+    auto result_triggering_rate = triggering_rates[real_target_str];
     algorithm_context.set_triggering_rate(result_triggering_rate);
     algorithm_context.set_triggering_rate_already_found(true);
 }
 
 
-std::stringstream rate_limit_individual_t::analyse_individual_probes4(
+
+std::stringstream rate_limit_individual_t::analyse_individual_probes(
         const probe_infos_t &probe_infos,
         int probing_rate,
         const std::string & pcap_file,
@@ -174,10 +200,9 @@ std::stringstream rate_limit_individual_t::analyse_individual_probes4(
 
     std::stringstream ostream;
 
-
-    std::unordered_map<IPv4Address, IP> matchers;
-    matchers.insert(std::make_pair(probe_infos.get_real_target4(), probe_infos.get_packet4()));
-    rate_limit_analyzer_t rate_limit_analyzer(probe_infos.get_probing_style(), matchers) ;
+    std::vector<probe_infos_t> probes_infos;
+    probes_infos.push_back(probe_infos);
+    auto  rate_limit_analyzer = rate_limit_analyzer_t::build_rate_limit_analyzer_t_from_probe_infos(probes_infos);
 
     auto it = algorithm_context.get_analyzed_pcap_file().find(pcap_file);
     if ( it != algorithm_context.get_analyzed_pcap_file().end()){
@@ -188,35 +213,35 @@ std::stringstream rate_limit_individual_t::analyse_individual_probes4(
         rate_limit_analyzer.start(pcap_file);
         algorithm_context.get_analyzed_pcap_file()[pcap_file] = std::make_unique<rate_limit_analyzer_t>(rate_limit_analyzer);
     }
-    auto real_target = probe_infos.get_real_target4();
 
+    auto real_target = probe_infos.get_real_target();
     // Extract loss rate.
-    auto loss_rate = rate_limit_analyzer.compute_loss_rate(probe_infos.get_real_target4());
+    auto loss_rate = rate_limit_analyzer.compute_loss_rate(real_target);
     std::cout << "Loss rate: " << loss_rate << "\n";
     // Now extract relevant infos.
-    auto change_point = rate_limit_analyzer.compute_icmp_change_point4(real_target);
-    auto transition_matrix_per_ip = rate_limit_analyzer.compute_loss_model4(real_target);
+    auto change_point = rate_limit_analyzer.compute_icmp_change_point(real_target);
+    auto transition_matrix_per_ip = rate_limit_analyzer.compute_loss_model(real_target);
 
     auto line_ostream = build_output_line(
-            probe_infos.get_real_target4(),
+            real_target,
             "INDIVIDUAL",
             probing_rate,
             change_point,
             loss_rate,
             transition_matrix_per_ip.transition(0,0), transition_matrix_per_ip.transition(0,1), transition_matrix_per_ip.transition(1,0), transition_matrix_per_ip.transition(1,1),
-            std::unordered_map<IPv4Address, double>());
+            std::unordered_map<std::string, double>());
     ostream << line_ostream.str();
     return ostream;
 }
 
-void rate_limit_individual_t::analyse_individual_probes4(const std::vector <probe_infos_t> & probes_infos,
-                                             const std::pair<double, double> & target_loss_rate_interval,
-                                             const options_t & options,
-                                             algorithm_context_t & algorithm_context
+void rate_limit_individual_t::analyse_individual_probes(const std::vector <probe_infos_t> & probes_infos,
+                                                        const std::pair<double, double> & target_loss_rate_interval,
+                                                        const options_t & options,
+                                                        algorithm_context_t & algorithm_context
 ){
 
 
-    std::unordered_map<IPv4Address, int> triggering_rates;
+    std::unordered_map<std::string, int> triggering_rates;
 
     // Sort probes_infos to put first the candidates.
 //    std::stable_sort(probes_infos.begin(), probes_infos.end(), [](const auto & probe_infos1, const auto & probe_infos2){
@@ -227,13 +252,13 @@ void rate_limit_individual_t::analyse_individual_probes4(const std::vector <prob
         auto first_candidate = probes_infos[0];
         for (int i = minimum_probing_rate; i < maximum_probing_rate; i *= 2){
             auto icmp_type = first_candidate.icmp_type_str();
-            auto real_target = first_candidate.get_real_target4();
+            auto real_target = first_candidate.get_real_target();
             try {
-                auto pcap_file = build_pcap_name(options.pcap_dir_individual, icmp_type, real_target.to_string(),
+                auto pcap_file = build_pcap_name(options.pcap_dir_individual, icmp_type, real_target,
                                                  "INDIVIDUAL", i);
                 algorithm_context.get_ostream()
-                        << analyse_individual_probes4(first_candidate, i, pcap_file,
-                                                      algorithm_context).str();
+                        << analyse_individual_probes(first_candidate, i, pcap_file,
+                                                     algorithm_context).str();
             }
             catch (const pcap_error & error) {
                 std::cerr << error.what() << "\n";
@@ -253,122 +278,16 @@ void rate_limit_individual_t::analyse_individual_probes4(const std::vector <prob
 
     for (const auto & probe_infos: probes_infos){
         auto icmp_type = probe_infos.icmp_type_str();
-        auto real_target = probe_infos.get_real_target4();
+        auto real_target = probe_infos.get_real_target();
         try {
-            auto pcap_file = build_pcap_name(options.pcap_dir_individual, icmp_type, real_target.to_string(), "INDIVIDUAL", minimum_probing_rate);
-            algorithm_context.get_ostream() << analyse_individual_probes4(probe_infos, minimum_probing_rate, pcap_file, algorithm_context).str();
-            pcap_file = build_pcap_name(options.pcap_dir_individual, icmp_type, real_target.to_string(), "INDIVIDUAL", triggering_rate);
-            algorithm_context.get_ostream() << analyse_individual_probes4(probe_infos, triggering_rate, pcap_file, algorithm_context).str();
+            auto pcap_file = build_pcap_name(options.pcap_dir_individual, icmp_type, real_target, "INDIVIDUAL", minimum_probing_rate);
+            algorithm_context.get_ostream() << analyse_individual_probes(probe_infos, minimum_probing_rate, pcap_file, algorithm_context).str();
+            pcap_file = build_pcap_name(options.pcap_dir_individual, icmp_type, real_target, "INDIVIDUAL", triggering_rate);
+            algorithm_context.get_ostream() << analyse_individual_probes(probe_infos, triggering_rate, pcap_file, algorithm_context).str();
         } catch (const pcap_error & error) {
             std::cerr << error.what() << "\n";
         }
 
     }
     algorithm_context.set_triggering_rate(triggering_rate);
-}
-
-
-void rate_limit_individual_t::execute_individual_probes6(
-        const NetworkInterface & sniff_interface,
-        const probe_infos_t &probe_infos,
-        int probing_rate,
-        const std::string & output_dir_individual){
-    // Probing rate represents the number of packets to send in 1 sec
-    auto nb_probes = measurement_time * probing_rate;
-
-    rate_limit_test_t<IPv6Address> rate_limit_test(nb_probes, probing_rate, sniff_interface,
-                                                   std::vector<probe_infos_t>(1, probe_infos));
-
-    auto icmp_type = probe_infos.icmp_type_str();
-
-    auto real_target = probe_infos.get_real_target6();
-    auto pcap_file_name = build_pcap_name(output_dir_individual, icmp_type, real_target.to_string(), "INDIVIDUAL", probing_rate);
-    rate_limit_test.set_pcap_file(pcap_file_name);
-
-    std::cout << "Starting " << icmp_type <<  " for " << real_target.to_string() << " with probing rate " << probing_rate <<  "...\n";
-    rate_limit_test.start();
-
-}
-
-void rate_limit_individual_t::execute_individual_probes6(
-        const std::vector<probe_infos_t> &probes_infos,
-        const std::vector<int> & probing_rates,
-        const std::string &output_dir_individual){
-    auto sniff_interface = NetworkInterface::default_interface();
-
-    /**
- *  Probe each interface separately with progressive rates.
- */
-    std::cout << "Proceeding to the individual probing phase...\n";
-
-    // Progressively increase the sending rate (log scale)
-    for (const auto & probe_infos : probes_infos){
-        for(const auto & probing_rate : probing_rates){
-
-            execute_individual_probes6(sniff_interface, probe_infos, probing_rate, output_dir_individual);
-            std::this_thread::sleep_for(std::chrono::seconds(5));
-        }
-    }
-}
-
-
-std::stringstream rate_limit_individual_t::analyse_individual_probes6(
-        const probe_infos_t &probe_infos,
-        int probing_rate,
-        const std::string & pcap_file){
-
-
-    std::stringstream ostream;
-
-
-    std::unordered_map<IPv6Address, IPv6> matchers;
-    matchers.insert(std::make_pair(probe_infos.get_real_target6(), probe_infos.get_packet6()));
-    rate_limit_analyzer_t rate_limit_analyzer(probe_infos.get_probing_style(), matchers) ;
-
-
-    auto real_target = probe_infos.get_real_target6();
-
-    // Start the analysis of responsiveness.
-    rate_limit_analyzer.start(pcap_file);
-
-    // Extract loss rate.
-    auto loss_rate = rate_limit_analyzer.compute_loss_rate(probe_infos.get_real_target6());
-    std::cout << "Loss rate: " << loss_rate << "\n";
-    // Now extract relevant infos.
-    auto change_point = rate_limit_analyzer.compute_icmp_change_point6(real_target);
-    auto transition_matrix_per_ip = rate_limit_analyzer.compute_loss_model6(real_target);
-
-    auto line_ostream = build_output_line(
-            probe_infos.get_real_target6(),
-            "INDIVIDUAL",
-            probing_rate,
-            change_point,
-            loss_rate,
-            transition_matrix_per_ip.transition(0,0), transition_matrix_per_ip.transition(0,1), transition_matrix_per_ip.transition(1,0), transition_matrix_per_ip.transition(1,1),
-            std::unordered_map<IPv6Address, double>());
-    ostream << line_ostream.str();
-    return ostream;
-}
-
-std::stringstream rate_limit_individual_t::analyse_individual_probes6(const std::vector <probe_infos_t> & probes_infos,
-                                                                      const std::vector <int> & probing_rates,
-                                                                      const std::string & output_dir_individual
-){
-
-    std::stringstream ostream;
-
-    for (const auto & probe_infos : probes_infos){
-        for (const auto probing_rate: probing_rates){
-            auto real_target = probe_infos.get_real_target6();
-            auto icmp_type = probe_infos.icmp_type_str();
-            auto pcap_file = build_pcap_name(output_dir_individual, icmp_type, real_target.to_string(), "INDIVIDUAL", probing_rate);
-            try {
-                ostream << analyse_individual_probes6(probe_infos, probing_rate, pcap_file).str();
-            } catch (const pcap_error & error) {
-                std::cerr << error.what() << "\n";
-            }
-        }
-
-    }
-    return ostream;
 }

@@ -92,6 +92,15 @@ const IPv6Address &probe_infos_t::get_real_target6() const {
     return m_real_target6;
 }
 
+std::string probe_infos_t::get_real_target() const {
+    if (m_family == PDU::PDUType::IP){
+        return m_real_target4.to_string();
+    } else if (m_family == PDU::PDUType::IPv6){
+        return m_real_target6.to_string();
+    }
+    return "";
+}
+
 
 std::string to_file_name (const std::vector<probe_infos_t> & alias_test, char separator){
     std::stringstream ss;

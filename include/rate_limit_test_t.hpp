@@ -15,7 +15,6 @@
 #include <probe_infos_t.hpp>
 #include <utils/container_utils_t.hpp>
 
-template<typename IPvAddress>
 class rate_limit_test_t{
 public:
 
@@ -53,15 +52,15 @@ public:
      * @param options_ips
      */
 
-    rate_limit_test_t(int nb_probes, int probing_rate, const Tins::NetworkInterface &iface,
-                                         const std::unordered_map<IPvAddress, probe_infos_t> &probes):
-            rate_limit_sender{nb_probes, probing_rate, iface, utils::values(probes)},
-            rate_limit_sniffer{iface}
-    {
-        for (const auto & probe : probes ){
-            rate_limit_sniffer.add_destination(probe.second.get_packet().dst_addr());
-        }
-    }
+//    rate_limit_test_t(int nb_probes, int probing_rate, const Tins::NetworkInterface &iface,
+//                                         const std::unordered_map<IPvAddress, probe_infos_t> &probes):
+//            rate_limit_sender{nb_probes, probing_rate, iface, utils::values(probes)},
+//            rate_limit_sniffer{iface}
+//    {
+//        for (const auto & probe : probes ){
+//            rate_limit_sniffer.add_destination(probe.second.get_packet().dst_addr());
+//        }
+//    }
 
 
     void set_pcap_file(const std::string &new_pcap_file){

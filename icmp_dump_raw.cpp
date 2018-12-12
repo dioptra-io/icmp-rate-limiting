@@ -37,7 +37,7 @@ int main (int argc, char **argv){
 
     analyzer.start(pcap_file);
 
-    std::cout << analyzer.serialize_raw4() << "\n";
+    std::cout << analyzer.serialize_raw() << "\n";
 
 
 

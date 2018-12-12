@@ -177,19 +177,28 @@ void rate_limit_sender_t::start() {
         }
         // v6
     }  else if (candidates[0].get_family() == PDU::PDUType::IPv6){
+
+        // Initialization of the pattern that will be sent.
         auto probing_pattern = build_probing_pattern6();
+        uint16_t seq = 1;
         uint16_t ip_id = 1;
 
-        for (int i = 0; probe_sent < nb_probes; ++i, ++probe_sent, ++ip_id){
-
+        for (int i = 0; probe_sent < nb_probes; ++i, ++probe_sent, ++seq){
+            if (seq == 0){
+                ++ip_id;
+            }
             auto probe_to_send = probing_pattern[i%probing_pattern.size()];
-            //TODO Only ICMPv6 is supported
             auto icmp = probe_to_send.find_pdu<ICMPv6>();
             if (icmp != nullptr){
-                icmp->identifier(1);
-                icmp->sequence(ip_id);
+                icmp->identifier(ip_id);
+                icmp->sequence(seq);
+            } else {
+
             }
+
             sender.send(probe_to_send);
+
+
             wait_loop(interval);
             if (probe_sent == nb_probes - 1){
                 auto end = std::chrono::high_resolution_clock::now();
@@ -198,7 +207,6 @@ void rate_limit_sender_t::start() {
             }
 
         }
-
     }
 
 }
