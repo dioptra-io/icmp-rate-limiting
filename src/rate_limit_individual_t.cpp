@@ -29,12 +29,10 @@ void rate_limit_individual_t::execute_individual_probes(
     auto nb_probes = measurement_time * probing_rate;
 
 
-    boost::variant<IPv4Address, IPv6Address> real_target;
     auto pcap_file_name = std::string{""};
     auto icmp_type = probe_infos.icmp_type_str();
     auto real_target_str = probe_infos.get_real_target();
-
-    real_target_str = boost::apply_visitor(visitor_t<to_string_functor_t>(to_string_functor_t()), real_target);
+    
     pcap_file_name = build_pcap_name(output_dir_individual, icmp_type,
                                      real_target_str,
                                      "INDIVIDUAL",
@@ -78,10 +76,13 @@ void rate_limit_individual_t::execute_individual_probes(
     // Use of boost variant in case C++ 17 is not available...
     boost::variant<IPv4Address, IPv6Address> real_target;
     std::unordered_map<std::string, int> triggering_rates;
+    if (probe_infos.get_family() == PDU::PDUType::IP){
+        real_target = probe_infos.get_real_target4();
+    } else if (probe_infos.get_family() == PDU::PDUType::IPv6){
+        real_target = probe_infos.get_real_target6();
+    }
 
-    auto real_target_str = probe_infos.get_real_target();
-
-    real_target_str = boost::apply_visitor(visitor_t<to_string_functor_t>(to_string_functor_t()), real_target);
+    auto real_target_str = boost::apply_visitor(visitor_t<to_string_functor_t>(to_string_functor_t()), real_target);
 
 
     auto icmp_type = probe_infos.icmp_type_str();
