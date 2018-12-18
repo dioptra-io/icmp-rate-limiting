@@ -97,6 +97,7 @@ void rate_limit_sender_t::start() {
     IPv6 warmup_probe6 {NetworkInterface::default_interface().ipv6_addresses()[0].address,
                         NetworkInterface::default_interface().ipv6_addresses()[0].address};
 
+    uint16_t start_ip_id = 34232;
     // Warm up to compute the loop overhead of sending a packet
     for (int i = 0; i < 2000; ++i) {
 
@@ -149,16 +150,24 @@ void rate_limit_sender_t::start() {
 
 
         uint16_t seq = 1;
-        uint16_t ip_id = 1;
+        uint16_t ip_id = start_ip_id;
+        uint16_t icmp_id = 1;
+
 
         for (int i = 0; probe_sent < nb_probes; ++i, ++probe_sent, ++seq){
             if (seq == 0){
                 ++ip_id;
             }
+
+            // Hack for working of PlanetLab, there are restriction to packets that are emitted with same IP-ID.
+            if (seq % 10 == 0){
+                ++icmp_id;
+            }
+
             auto probe_to_send = probing_pattern[i%probing_pattern.size()];
             auto icmp = probe_to_send.find_pdu<ICMP>();
             if (icmp != nullptr){
-                icmp->id(ip_id);
+                icmp->id(icmp_id);
                 icmp->sequence(seq);
             } else {
                 probe_to_send.id(seq);
@@ -181,7 +190,7 @@ void rate_limit_sender_t::start() {
         // Initialization of the pattern that will be sent.
         auto probing_pattern = build_probing_pattern6();
         uint16_t seq = 1;
-        uint16_t ip_id = 1;
+        uint16_t ip_id = start_ip_id;
 
         for (int i = 0; probe_sent < nb_probes; ++i, ++probe_sent, ++seq){
             if (seq == 0){

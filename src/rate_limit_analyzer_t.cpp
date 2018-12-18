@@ -28,6 +28,7 @@ namespace{
     bool already_loaded = false;
     struct compare_icmp_packet{
         bool operator() (const Packet & packet1, const Packet & packet2) const {
+
             auto icmp1 = packet1.pdu()->template find_pdu<ICMP>();
             auto icmp2 = packet2.pdu()->template find_pdu<ICMP>();
 

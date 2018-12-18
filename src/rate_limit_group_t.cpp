@@ -94,7 +94,22 @@ void rate_limit_group_t::execute_group_probes(const std::vector<probe_infos_t> &
                 probing_rate = compute_probing_rate(algorithm_context.get_triggering_rate(), group);
             }
         } else {
-            probing_rate = compute_probing_rate(minimum_probing_rate, group);
+            if (options.use_individual_for_analyse){
+
+                probing_rate = find_triggering_rate(group[0], group, minimum_probing_rate, target_loss_rate_interval,
+                        options.pcap_dir_individual, "INDIVIDUAL", triggering_rates);
+                algorithm_context.set_triggering_rate(probing_rate);
+                algorithm_context.set_triggering_rate_already_found(true);
+
+                probing_rate = compute_probing_rate(probing_rate, group);
+
+
+
+
+            } else if (options.use_group_for_analyse){
+                probing_rate = compute_probing_rate(minimum_probing_rate, group);
+            }
+
         }
 
 
@@ -228,15 +243,15 @@ std::stringstream rate_limit_group_t::analyse_group_probes(
     if (group_type == "GROUPSPR") {
 
 
-        for (int i = 0; i < group.size(); ++i) {
-            auto ip_address_i = group[i].get_real_target();
-            for (int j = i; j < group.size(); ++j) {
-                auto ip_address_j = group[j].get_real_target();
-                auto correlation = rate_limit_analyzer.correlation(ip_address_i, ip_address_j);
-                correlations[std::make_pair(ip_address_i, ip_address_j)] = correlation;
-                correlations[std::make_pair(ip_address_j, ip_address_i)] = correlation;
-            }
-        }
+//        for (int i = 0; i < group.size(); ++i) {
+//            auto ip_address_i = group[i].get_real_target();
+//            for (int j = i; j < group.size(); ++j) {
+//                auto ip_address_j = group[j].get_real_target();
+//                auto correlation = rate_limit_analyzer.correlation(ip_address_i, ip_address_j);
+//                correlations[std::make_pair(ip_address_i, ip_address_j)] = correlation;
+//                correlations[std::make_pair(ip_address_j, ip_address_i)] = correlation;
+//            }
+//        }
 
     }
 
@@ -356,9 +371,7 @@ int rate_limit_group_t::compute_rate_factor_dpr(int before_triggering_rate, int 
 
     auto low_rate = before_triggering_rate / ip_n;
 
-    auto remaining_rate = triggering_rate;
-
-    auto rate_factor = static_cast<int>(remaining_rate / low_rate);
+    auto rate_factor = static_cast<int>(triggering_rate / low_rate);
 
 
     rate_factor = std::max(rate_factor, 2);
