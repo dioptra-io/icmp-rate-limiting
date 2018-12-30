@@ -29,6 +29,7 @@ namespace utils{
         bool first_only = false;
         std::string pcap_dir_individual = "";
         std::string pcap_dir_groups = "";
+        int measurement_time = 5;
     };
 
     enum class probing_style_t {DIRECT, INDIRECT, UNKNOWN};

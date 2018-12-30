@@ -11,6 +11,40 @@
 
 namespace utils{
 
+
+    template<typename Integer>
+    Integer gcd(Integer u, Integer v){
+        while ( v != 0) {
+            Integer r = u % v;
+            u = v;
+            v = r;
+        }
+        return u;
+    }
+    template<typename Integer>
+    Integer lcm(Integer u, Integer v){
+        return std::abs(u * v) / gcd(u, v);
+    }
+
+    template<typename Integer>
+    Integer lcm(const std::vector<Integer> & v){
+        auto lcm_v = v[0];
+        for (int i = 1; i < v.size(); ++i){
+            lcm_v = lcm(lcm_v, v[i]);
+        }
+        return lcm_v;
+    }
+
+    template<typename Integer>
+    Integer gcd(const std::vector<Integer> & v){
+        auto gcd_v = v[0];
+        for (int i = 1; i < v.size(); ++i){
+            gcd_v = gcd(gcd_v, v[i]);
+        }
+        return gcd_v;
+    }
+
+
     template<typename Real>
     double significant_digits(Real decimal, int digit_number){
         auto digits = pow(10, digit_number);

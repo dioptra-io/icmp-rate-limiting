@@ -164,6 +164,14 @@ namespace utils{
             if (address_family == std::string("4")){
                 // Set the real address
                 IPv4Address real_address {tokens[real_address_index]};
+                // Do not add if address already in the vector.
+                auto is_already_in_addresses_it = std::find_if(probes_infos.begin(), probes_infos.end(), [&real_address](const auto & probe_infos){
+                   return probe_infos.get_real_target() == real_address.to_string();
+                });
+
+                if (is_already_in_addresses_it != probes_infos.end()){
+                    continue;
+                }
 
                 // Set the probing address
                 IPv4Address probing_address {tokens[probing_address_index]};
@@ -197,12 +205,19 @@ namespace utils{
                     probe.ttl(flow_ttl);
                 }
                 probe /= RawPDU("kevin.vermeulen@sorbonne-universite.fr");
+
                 probes_infos.emplace_back(group_id, 1, probe, real_address, protocol,  probing_style, interface_type);
 
             } else if (address_family == std::string("6")){
                 // Set the real address
                 IPv6Address real_address {tokens[real_address_index]};
+                auto is_already_in_addresses_it = std::find_if(probes_infos.begin(), probes_infos.end(), [&real_address](const auto & probe_infos){
+                    return probe_infos.get_real_target() == real_address.to_string();
+                });
 
+                if (is_already_in_addresses_it != probes_infos.end()){
+                    continue;
+                }
                 // Set the probing address
                 IPv6Address probing_address {tokens[probing_address_index]};
                 //TODO
@@ -254,4 +269,32 @@ namespace utils{
 
         return ostream;
     }
+
+    std::pair<double, double> parse_loss_rate_interval(const std::string & loss_rate_interval_str){
+        std::pair<double, double> loss_rate_interval;
+
+        std::regex loss_rate_interval_regex{"0[.][0-9]{1,2}"};
+
+
+        std::smatch sm;
+        int i = 0;
+        std::string copy_loss_rate_interval_str = loss_rate_interval_str;
+        while(std::regex_search(copy_loss_rate_interval_str, sm, loss_rate_interval_regex))
+        {
+            if (i == 0){
+                loss_rate_interval.first = std::stod(sm.str());
+            } else if (i == 1){
+                loss_rate_interval.second = std::stod(sm.str());
+            } else {
+                std::cerr << "Invalid loss rate interval, exiting...\n";
+                exit(1);
+            }
+            i += 1;
+            copy_loss_rate_interval_str = sm.suffix();
+        }
+
+        return loss_rate_interval;
+
+    }
+
 }

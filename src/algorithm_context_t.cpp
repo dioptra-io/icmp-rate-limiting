@@ -6,6 +6,13 @@
 #include <algorithm_context_t.hpp>
 
 
+algorithm_context_t::algorithm_context_t(const std::vector<probe_infos_t> &probes_infos) {
+    for (const auto & probe_infos : probes_infos){
+        loss_rates_by_ips[probe_infos.get_real_target()] = std::map<int, double>();
+    }
+}
+
+
 std::unordered_map <std::string, std::unique_ptr<rate_limit_analyzer_t>> & algorithm_context_t::get_analyzed_pcap_file() {
     return analyzed_pcap_file;
 }
@@ -14,16 +21,9 @@ std::stringstream &algorithm_context_t::get_ostream() {
     return ostream;
 }
 
-int algorithm_context_t::get_triggering_rate() const {
-    return triggering_rate;
-}
 
 bool algorithm_context_t::is_triggering_rate_already_found() const {
     return triggering_rate_already_found;
-}
-
-void algorithm_context_t::set_triggering_rate(int triggering_rate) {
-    algorithm_context_t::triggering_rate = triggering_rate;
 }
 
 void algorithm_context_t::set_triggering_rate_already_found(bool triggering_rate_already_found) {
@@ -37,3 +37,13 @@ bool algorithm_context_t::is_triggering_rate_found_by_group() const {
 void algorithm_context_t::set_triggering_rate_found_by_group(bool triggering_rate_found_by_group) {
     algorithm_context_t::triggering_rate_found_by_group = triggering_rate_found_by_group;
 }
+
+std::unordered_map<std::string, std::map<int, double>> & algorithm_context_t::get_loss_rates_by_ips()  {
+    return loss_rates_by_ips;
+}
+
+std::unordered_map<std::string, int> & algorithm_context_t::get_triggering_rates_by_ips() {
+    return triggering_rates_by_ips;
+}
+
+

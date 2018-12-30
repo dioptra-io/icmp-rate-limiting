@@ -34,7 +34,8 @@ void rate_limit_group_t::execute_group_probes(const NetworkInterface & sniff_int
                            const std::vector<probe_infos_t> & group,
                            int probing_rate,
                            const std::string & group_type,
-                           const std::string & output_dir_group ){
+                           const std::string & output_dir_group,
+                           int measurement_time ){
 
     auto nb_probes = measurement_time * probing_rate;
     auto icmp_type = group[0].icmp_type_str();
@@ -81,33 +82,36 @@ void rate_limit_group_t::execute_group_probes(const std::vector<probe_infos_t> &
      */
     auto sniff_interface = NetworkInterface::default_interface();
 
-    std::unordered_map<std::string, int> triggering_rates;
+    std::unordered_map<std::string, int> & triggering_rates = algorithm_context.get_triggering_rates_by_ips();
 
 
     for (const auto & id_group: groups){
         const auto & group = id_group.second;
         auto probing_rate = 0;
+        const auto & first_candidate = group[0];
         if (algorithm_context.is_triggering_rate_already_found()){
             if (algorithm_context.is_triggering_rate_found_by_group()){
-                probing_rate = algorithm_context.get_triggering_rate();
+                probing_rate = triggering_rates[first_candidate.get_real_target()];
             } else {
-                probing_rate = compute_probing_rate(algorithm_context.get_triggering_rate(), group);
+                probing_rate = compute_probing_rate(
+                        triggering_rates[first_candidate.get_real_target()],
+                        group,
+                        algorithm_context);
             }
         } else {
             if (options.use_individual_for_analyse){
 
                 probing_rate = find_triggering_rate(group[0], group, minimum_probing_rate, target_loss_rate_interval,
-                        options.pcap_dir_individual, "INDIVIDUAL", triggering_rates);
-                algorithm_context.set_triggering_rate(probing_rate);
+                        options.pcap_dir_individual, "INDIVIDUAL", algorithm_context);
                 algorithm_context.set_triggering_rate_already_found(true);
 
-                probing_rate = compute_probing_rate(probing_rate, group);
+                probing_rate = compute_probing_rate(probing_rate, group, algorithm_context);
 
 
 
 
             } else if (options.use_group_for_analyse){
-                probing_rate = compute_probing_rate(minimum_probing_rate, group);
+                probing_rate = compute_probing_rate(minimum_probing_rate, group, algorithm_context);
             }
 
         }
@@ -142,23 +146,17 @@ void rate_limit_group_t::execute_group_probes(const std::vector<probe_infos_t> &
                 // Select the rate so the sum of the group is lower than the individual triggering rate.
                 // The triggering rate is the rate before the probing rate if already found
 
-                auto n_candidates = std::count_if(probes_infos.begin(), probes_infos.end(), [](const auto & probe_infos){
-                    return probe_infos.get_interface_type() == interface_type_t::CANDIDATE;
-                });
-
-                auto ratio_rate = compute_rate_factor_dpr(minimum_probing_rate, probing_rate, n_candidates);
-                // Change the rate of 1 candidate by ratio_rate
+                // Change the rate of the candidates by ratio_rate
                 group_t group_different_rates(group.begin(), group.end());
-                for (auto &probe_infos: group_different_rates) {
-                    if (probe_infos.get_interface_type() == interface_type_t::CANDIDATE) {
-                        probe_infos.set_probing_rate(ratio_rate);
-                        break;
-                    }
-                }
-                execute_group_probes(sniff_interface, group_different_rates, probing_rate, group_type, options.pcap_dir_groups);
+                probing_rate = compute_rate_factor_dpr(group_different_rates, algorithm_context);
+
+
+
+                execute_group_probes(sniff_interface, group_different_rates, probing_rate, group_type, options.pcap_dir_groups,
+                                     options.measurement_time);
             }
             else if (group_type == "GROUPSPR"){
-                execute_group_probes(sniff_interface, group, probing_rate, group_type, options.pcap_dir_groups);
+                execute_group_probes(sniff_interface, group, probing_rate, group_type, options.pcap_dir_groups, options.measurement_time);
             }
 
             if (algorithm_context.is_triggering_rate_already_found()){
@@ -193,13 +191,12 @@ void rate_limit_group_t::execute_group_probes(const std::vector<probe_infos_t> &
                 }
 
             }
-            std::this_thread::sleep_for(std::chrono::seconds(measurement_time + 1));
+            std::this_thread::sleep_for(std::chrono::seconds(options.measurement_time + 1));
         }
         if (!algorithm_context.is_triggering_rate_already_found()){
-            algorithm_context.set_triggering_rate(probing_rate);
             algorithm_context.set_triggering_rate_found_by_group(true);
         }
-        std::this_thread::sleep_for(std::chrono::seconds(measurement_time + 1));
+        std::this_thread::sleep_for(std::chrono::seconds(options.measurement_time + 1));
     }
     algorithm_context.set_triggering_rate_already_found(true);
 }
@@ -331,34 +328,42 @@ void rate_limit_group_t::analyse_group_probes(
     });
     std::cout << "Finished building groups\n";
 
-    std::unordered_map<std::string, int> triggering_rates;
+    std::unordered_map<std::string, int> & triggering_rates  = algorithm_context.get_triggering_rates_by_ips();
 
-    auto triggering_rate = 0;
+    auto probing_rate = 0;
 
-    for (const auto & group : groups){
-        const auto & probe_infos = group.second[0];
+    for (auto & group : groups){
+        const auto & first_candidate = group.second[0];
 
         if (algorithm_context.is_triggering_rate_already_found()){
-            triggering_rate = algorithm_context.get_triggering_rate();
-            if (!options.group_only){
-                triggering_rate = compute_probing_rate(triggering_rate, group.second);
+            auto triggering_rate = triggering_rates[first_candidate.get_real_target()];
+
+            if (group_type == "GROUPSPR"){
+                probing_rate = compute_probing_rate(triggering_rate, group.second, algorithm_context);
+            } else if (group_type == "GROUPDPR"){
+                probing_rate = compute_rate_factor_dpr(group.second, algorithm_context);
             }
+
         }
         else {
             // We are in analyse only phase
             if (options.use_group_for_analyse){
-                auto starting_probing_rate = compute_probing_rate(minimum_probing_rate, group.second);
-                triggering_rate = find_triggering_rate(probe_infos,probes_infos, starting_probing_rate, target_loss_interval, options.pcap_dir_groups, group_type, triggering_rates);
-                algorithm_context.set_triggering_rate_found_by_group(true);
+                auto starting_probing_rate = compute_probing_rate(minimum_probing_rate, group.second, algorithm_context);
+                probing_rate = find_triggering_rate(first_candidate,probes_infos, starting_probing_rate, target_loss_interval, options.pcap_dir_groups, group_type, algorithm_context);
             } else if (options.use_individual_for_analyse){
-                triggering_rate = find_triggering_rate(probe_infos,probes_infos, minimum_probing_rate, target_loss_interval, options.pcap_dir_individual, "INDIVIDUAL", triggering_rates);
-                triggering_rate = compute_probing_rate(triggering_rate, group.second);
+                auto triggering_rate = find_triggering_rate(first_candidate,probes_infos, minimum_probing_rate, target_loss_interval, options.pcap_dir_individual, "INDIVIDUAL", algorithm_context);
+                if (group_type == "GROUPSPR"){
+                    probing_rate = compute_probing_rate(triggering_rate, group.second, algorithm_context);
+                } else if (group_type == "GROUPDPR"){
+                    probing_rate = compute_rate_factor_dpr(group.second, algorithm_context);
+                }
+
             }
-            algorithm_context.set_triggering_rate(triggering_rate);
+            algorithm_context.set_triggering_rate_found_by_group(true);
         }
 
         try{
-            algorithm_context.get_ostream() << analyse_group_probes(group.second, triggering_rate, group_type, options.pcap_dir_groups, algorithm_context).str();
+            algorithm_context.get_ostream() << analyse_group_probes(group.second, probing_rate, group_type, options.pcap_dir_groups, algorithm_context).str();
         } catch (const pcap_error & e){
             std::cerr << e.what() << "\n";
         }
@@ -367,20 +372,71 @@ void rate_limit_group_t::analyse_group_probes(
 }
 
 
-int rate_limit_group_t::compute_rate_factor_dpr(int before_triggering_rate, int triggering_rate, int ip_n){
+int rate_limit_group_t::compute_low_rate_dpr(const probe_infos_t &first_candidate, const probe_infos_t &other_candidate,
+                                             algorithm_context_t &algorithm_context) const{
 
-    auto low_rate = before_triggering_rate / ip_n;
+    // Find the highest rate lower than the high_rate and that brings a 0 loss rate for the other candidate.
+    auto & loss_rates = algorithm_context.get_loss_rates_by_ips()[other_candidate.get_real_target()];
 
-    auto rate_factor = static_cast<int>(triggering_rate / low_rate);
+    // Number of candidates + witness
+    auto ip_n = algorithm_context.get_triggering_rates_by_ips().size();
+
+    auto highest_pr_lr_0 = 0;
 
 
-    rate_factor = std::max(rate_factor, 2);
+    for (const auto & pr_lr : loss_rates){
+        if (pr_lr.first > highest_pr_lr_0 && pr_lr.second < 0.01){
+            highest_pr_lr_0 = pr_lr.first;
+        }
+    }
 
-    return rate_factor;
+    auto low_rate = highest_pr_lr_0 / ip_n;
+
+    return low_rate;
 
 }
 
-int rate_limit_group_t::compute_probing_rate(int base_probing_rate, const std::vector<probe_infos_t> & group) {
+int rate_limit_group_t::compute_rate_factor_dpr(std::vector<probe_infos_t> &probes_infos,
+                                                 algorithm_context_t &algorithm_context) const {
+
+    auto total_probing_rate = 0;
+
+    std::vector<int> rate_factors;
+    auto & first_candidate = probes_infos[0];
+    auto high_rate = algorithm_context.get_triggering_rates_by_ips()[first_candidate.get_real_target()];
+
+    total_probing_rate += high_rate;
+
+    for (int i = 1; i < probes_infos.size(); ++i){
+        auto low_rate = compute_low_rate_dpr(first_candidate, probes_infos[i], algorithm_context);
+        if (low_rate < 10){
+            low_rate = 10;
+        }
+        total_probing_rate += low_rate;
+        auto rate_factor = high_rate / low_rate;
+        rate_factor = std::max(rate_factor, 2);
+        rate_factors.push_back(rate_factor);
+
+        std::cout << "Low rate: " << low_rate <<"\n";
+
+    }
+
+    auto lcm_rates = lcm(rate_factors);
+    auto gcd_rates = gcd(rate_factors);
+
+    std::cout << "High rate factor lcm: " << lcm_rates << "\n";
+
+
+    first_candidate.set_probing_rate(lcm_rates);
+    for (int i = 1; i < probes_infos.size(); ++i){
+        std::cout << "Low rate factor for " << probes_infos[i].get_real_target() << ": " << rate_factors[i-1]/gcd_rates << "\n";
+        probes_infos[i].set_probing_rate(rate_factors[i-1]/gcd_rates);
+    }
+
+    return total_probing_rate;
+}
+
+int rate_limit_group_t::compute_probing_rate(int base_probing_rate, const std::vector<probe_infos_t> & group, algorithm_context_t& algorithm_context) const {
 
     // Count the number of candidates and the number of witnesses
 
@@ -401,3 +457,5 @@ int rate_limit_group_t::compute_probing_rate(int base_probing_rate, const std::v
 
     return probing_rate;
 }
+
+

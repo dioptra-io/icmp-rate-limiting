@@ -24,7 +24,7 @@ void rate_limit_individual_t::execute_individual_probes(
         const NetworkInterface & sniff_interface,
         const probe_infos_t &probe_infos,
         int probing_rate,
-        const std::string & output_dir_individual){
+        const std::string & output_dir_individual, int measurement_time){
     // Probing rate represents the number of packets to send in 1 sec
     auto nb_probes = measurement_time * probing_rate;
 
@@ -69,123 +69,114 @@ void rate_limit_individual_t::execute_individual_probes(
 
     // Progressively adapt the sending rate so the targeted loss rate is obtained on first candidate.
 
-    auto probe_infos = probes_infos[0];
+    for (const auto & probe_infos : probes_infos){
 
-    auto is_binary_search = false;
-
-    // Use of boost variant in case C++ 17 is not available...
-    boost::variant<IPv4Address, IPv6Address> real_target;
-    std::unordered_map<std::string, int> triggering_rates;
-    if (probe_infos.get_family() == PDU::PDUType::IP){
-        real_target = probe_infos.get_real_target4();
-    } else if (probe_infos.get_family() == PDU::PDUType::IPv6){
-        real_target = probe_infos.get_real_target6();
-    }
-
-    auto real_target_str = boost::apply_visitor(visitor_t<to_string_functor_t>(to_string_functor_t()), real_target);
-
-
-    auto icmp_type = probe_infos.icmp_type_str();
-
-    if (options.is_custom_probing_rates){
-        for (auto probing_rate: options.custom_probing_rates){
-
-            execute_individual_probes(sniff_interface, probe_infos, probing_rate, options.pcap_dir_individual);
-            std::this_thread::sleep_for(std::chrono::seconds(measurement_time + 1));
+        // Use of boost variant in case C++ 17 is not available...
+        boost::variant<IPv4Address, IPv6Address> real_target;
+        std::unordered_map<std::string, int> & triggering_rates = algorithm_context.get_triggering_rates_by_ips();
+        if (probe_infos.get_family() == PDU::PDUType::IP){
+            real_target = probe_infos.get_real_target4();
+        } else if (probe_infos.get_family() == PDU::PDUType::IPv6){
+            real_target = probe_infos.get_real_target6();
         }
-        // Hack here to output the results of all rates for the need of the survey
-        for (auto probing_rate : options.custom_probing_rates){
-            auto pcap_file = build_pcap_name(options.pcap_dir_individual, icmp_type,
-                    real_target_str, "INDIVIDUAL",
-                                             probing_rate);
-            auto ostream = std::stringstream();
-            if (probe_infos.get_family() == PDU::PDUType::IPv6){
-                ostream = analyse_individual_probes(probe_infos, probing_rate, pcap_file, algorithm_context);
-            } else {
-                ostream = analyse_individual_probes(probe_infos, probing_rate, pcap_file, algorithm_context);
+
+        auto real_target_str = boost::apply_visitor(visitor_t<to_string_functor_t>(to_string_functor_t()), real_target);
+
+
+        auto icmp_type = probe_infos.icmp_type_str();
+
+        if (options.is_custom_probing_rates){
+            for (auto probing_rate: options.custom_probing_rates){
+
+                execute_individual_probes(sniff_interface, probe_infos, probing_rate, options.pcap_dir_individual, options.measurement_time);
+                std::this_thread::sleep_for(std::chrono::seconds(options.measurement_time + 1));
+            }
+            // Hack here to output the results of all rates for the need of the survey
+            for (auto probing_rate : options.custom_probing_rates){
+                auto pcap_file = build_pcap_name(options.pcap_dir_individual, icmp_type,
+                                                 real_target_str, "INDIVIDUAL",
+                                                 probing_rate);
+                auto ostream = std::stringstream();
+                if (probe_infos.get_family() == PDU::PDUType::IPv6){
+                    ostream = analyse_individual_probes(probe_infos, probing_rate, pcap_file, algorithm_context);
+                } else {
+                    ostream = analyse_individual_probes(probe_infos, probing_rate, pcap_file, algorithm_context);
+                }
+
+                algorithm_context.get_ostream() << ostream.str();
+            }
+            return;
+        }
+
+        auto is_binary_search = false;
+        auto probing_rate = starting_probing_rate;
+        auto binary_search_iteration = 0;
+        std::map<int, double> loss_rate_by_probing_rate;
+
+
+
+        while(binary_search_iteration < maximum_binary_search_iteration) {
+
+            if (probing_rate >= maximum_probing_rate || probing_rate < minimum_probing_rate) {
+                std::cout << "No triggering probing rate found for the target loss rate interval ["
+                          << target_loss_rate_interval.first
+                          << ", " << target_loss_rate_interval.second << "] for " << real_target << "\n";
+                break;
             }
 
-            algorithm_context.get_ostream() << ostream.str();
-        }
-        return;
-    }
-    auto probing_rate = starting_probing_rate;
-    auto binary_search_iteration = 0;
-    std::map<int, double> loss_rate_by_probing_rate;
+            execute_individual_probes(sniff_interface, probe_infos, probing_rate, options.pcap_dir_individual, options.measurement_time);
 
+            std::vector<probe_infos_t> v;
+            v.push_back(probe_infos);
+            auto rate_limit_analyzer = rate_limit_analyzer_t::build_rate_limit_analyzer_t_from_probe_infos(v);
 
-
-    while(binary_search_iteration < maximum_binary_search_iteration) {
-
-        if (probing_rate >= maximum_probing_rate || probing_rate < minimum_probing_rate) {
-            std::cout << "No triggering probing rate found for the target loss rate interval ["
-                      << target_loss_rate_interval.first
-                      << ", " << target_loss_rate_interval.second << "] for " << real_target << "\n";
-            break;
-        }
-
-        execute_individual_probes(sniff_interface, probe_infos, probing_rate, options.pcap_dir_individual);
-
-        std::vector<probe_infos_t> v;
-        v.push_back(probe_infos);
-        auto rate_limit_analyzer = rate_limit_analyzer_t::build_rate_limit_analyzer_t_from_probe_infos(v);
-
-        auto pcap_file = build_pcap_name(options.pcap_dir_individual, icmp_type, real_target_str, "INDIVIDUAL",
-                                         probing_rate);
-        rate_limit_analyzer.start(pcap_file);
-
-        algorithm_context.get_analyzed_pcap_file()[pcap_file] = std::make_unique<rate_limit_analyzer_t>(rate_limit_analyzer);
-
-        auto loss_rate = rate_limit_analyzer.compute_loss_rate(real_target_str);
-        bool continue_probing = compute_next_probing_rate(loss_rate,
-                                                          real_target_str,
-                                                          loss_rate_by_probing_rate,
-                                                          probing_rate,
-                                                          starting_probing_rate,
-                                                          triggering_rates,
-                                                          target_loss_rate_interval,
-                                                          is_binary_search,
-                                                          binary_search_iteration);
-
-        if (!continue_probing){
-            break;
-        }
-
-        std::this_thread::sleep_for(std::chrono::seconds(measurement_time + 1));
-    }
-
-    if (!options.first_only){
-        auto has_found_triggering_rate = triggering_rates.find(real_target_str) != triggering_rates.end();
-        // In case no triggering rate has been found, take the closest value to the triggering rate of the first candidate
-        // If it is the first candidate, take the probing rate that did bring the closest loss rate from the interval.
-        if (!has_found_triggering_rate) {
-            auto closest_probing_rate = find_closest_rate(probes_infos[0], loss_rate_by_probing_rate, target_loss_rate_interval);
-            triggering_rates[real_target_str] = closest_probing_rate;
-        }
-
-        for (int i = 1; i < probes_infos.size(); ++i){
-            std::this_thread::sleep_for(std::chrono::seconds(measurement_time + 1));
-            execute_individual_probes(sniff_interface, probes_infos[i], minimum_probing_rate, options.pcap_dir_individual);
-        }
-
-        for (int i = 1; i < probes_infos.size(); ++i){
-            std::this_thread::sleep_for(std::chrono::seconds(measurement_time + 1));
-            execute_individual_probes(sniff_interface, probes_infos[i], triggering_rates[real_target_str], options.pcap_dir_individual);
-        }
-    }
-    else{
-        // Hack here to output the results of all rates for the need of the survey
-        for (const auto & probing_rate_loss_rate : loss_rate_by_probing_rate){
             auto pcap_file = build_pcap_name(options.pcap_dir_individual, icmp_type, real_target_str, "INDIVIDUAL",
-                                             probing_rate_loss_rate.first);
-            auto ostream = analyse_individual_probes(probe_infos, probing_rate_loss_rate.first, pcap_file, algorithm_context);
-            algorithm_context.get_ostream() << ostream.str();
+                                             probing_rate);
+            rate_limit_analyzer.start(pcap_file);
+
+            algorithm_context.get_analyzed_pcap_file()[pcap_file] = std::make_unique<rate_limit_analyzer_t>(rate_limit_analyzer);
+
+            auto loss_rate = rate_limit_analyzer.compute_loss_rate(real_target_str);
+            bool continue_probing = compute_next_probing_rate(loss_rate,
+                                                              real_target_str,
+                                                              loss_rate_by_probing_rate,
+                                                              probing_rate,
+                                                              starting_probing_rate,
+                                                              triggering_rates,
+                                                              target_loss_rate_interval,
+                                                              is_binary_search,
+                                                              binary_search_iteration);
+
+            if (!continue_probing){
+                break;
+            }
+
+            std::this_thread::sleep_for(std::chrono::seconds(options.measurement_time + 1));
         }
+
+        if (!options.first_only){
+            auto has_found_triggering_rate = triggering_rates.find(real_target_str) != triggering_rates.end();
+            // In case no triggering rate has been found, take the closest value to the triggering rate of the first candidate
+            // If it is the first candidate, take the probing rate that did bring the closest loss rate from the interval.
+            if (!has_found_triggering_rate) {
+                auto closest_probing_rate = find_closest_rate(probes_infos[0], loss_rate_by_probing_rate, target_loss_rate_interval);
+                triggering_rates[real_target_str] = closest_probing_rate;
+            }
+            algorithm_context.get_loss_rates_by_ips()[real_target_str] = loss_rate_by_probing_rate;
+//            algorithm_context.get_triggering_rates_by_ips()[real_target_str] = triggering_rates[real_target_str];
+        }
+        else{
+            // Hack here to output the results of all rates for the need of the survey
+            for (const auto & probing_rate_loss_rate : loss_rate_by_probing_rate){
+                auto pcap_file = build_pcap_name(options.pcap_dir_individual, icmp_type, real_target_str, "INDIVIDUAL",
+                                                 probing_rate_loss_rate.first);
+                auto ostream = analyse_individual_probes(probe_infos, probing_rate_loss_rate.first, pcap_file, algorithm_context);
+                algorithm_context.get_ostream() << ostream.str();
+            }
+        }
+
     }
 
-
-    auto result_triggering_rate = triggering_rates[real_target_str];
-    algorithm_context.set_triggering_rate(result_triggering_rate);
     algorithm_context.set_triggering_rate_already_found(true);
 }
 
@@ -242,8 +233,6 @@ void rate_limit_individual_t::analyse_individual_probes(const std::vector <probe
 ){
 
 
-    std::unordered_map<std::string, int> triggering_rates;
-
     // Sort probes_infos to put first the candidates.
 //    std::stable_sort(probes_infos.begin(), probes_infos.end(), [](const auto & probe_infos1, const auto & probe_infos2){
 //        return static_cast<int>(probe_infos1.get_interface_type()) < static_cast<int>(probe_infos2.get_interface_type());
@@ -269,26 +258,24 @@ void rate_limit_individual_t::analyse_individual_probes(const std::vector <probe
     }
 
 
-    int triggering_rate = 0;
-    if (algorithm_context.is_triggering_rate_already_found()){
-        triggering_rate = algorithm_context.get_triggering_rate();
-    }
-    else {
-        triggering_rate = find_triggering_rate(probes_infos[0], probes_infos, minimum_probing_rate, target_loss_rate_interval, options.pcap_dir_individual, "INDIVIDUAL", triggering_rates);
-    }
+    for (const auto & probe_infos : probes_infos){
+        int triggering_rate = 0;
+        if (algorithm_context.is_triggering_rate_already_found()){
+            triggering_rate = algorithm_context.get_triggering_rates_by_ips()[probe_infos.get_real_target()];
+        }
+        else {
+            triggering_rate = find_triggering_rate(probe_infos, probes_infos, minimum_probing_rate, target_loss_rate_interval, options.pcap_dir_individual, "INDIVIDUAL", algorithm_context);
+            algorithm_context.get_triggering_rates_by_ips()[probe_infos.get_real_target()] = triggering_rate;
+        }
 
-    for (const auto & probe_infos: probes_infos){
         auto icmp_type = probe_infos.icmp_type_str();
         auto real_target = probe_infos.get_real_target();
         try {
-            auto pcap_file = build_pcap_name(options.pcap_dir_individual, icmp_type, real_target, "INDIVIDUAL", minimum_probing_rate);
-            algorithm_context.get_ostream() << analyse_individual_probes(probe_infos, minimum_probing_rate, pcap_file, algorithm_context).str();
-            pcap_file = build_pcap_name(options.pcap_dir_individual, icmp_type, real_target, "INDIVIDUAL", triggering_rate);
+            auto pcap_file = build_pcap_name(options.pcap_dir_individual, icmp_type, real_target, "INDIVIDUAL", triggering_rate);
             algorithm_context.get_ostream() << analyse_individual_probes(probe_infos, triggering_rate, pcap_file, algorithm_context).str();
         } catch (const pcap_error & error) {
             std::cerr << error.what() << "\n";
         }
 
     }
-    algorithm_context.set_triggering_rate(triggering_rate);
 }

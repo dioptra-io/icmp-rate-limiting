@@ -18,7 +18,8 @@ public:
                                const std::vector<probe_infos_t> & group,
                                int probing_rate,
                                const std::string & group_type,
-                               const std::string & output_dir_group );
+                               const std::string & output_dir_group,
+                               int measurement_time );
 
     void execute_group_probes(const std::vector<probe_infos_t> & probes_infos,
                                const std::pair<double, double> & target_loss_rate_interval,
@@ -44,9 +45,16 @@ public:
 
 
 private:
+    /**
+     * Gives the rate factor between the first candidate and the other candidate
+     * @param algorithm_context
+     * @return
+     */
+    int compute_low_rate_dpr(const probe_infos_t &first_candidate, const probe_infos_t &other_candidate,
+                             algorithm_context_t &algorithm_context) const ;
+    int compute_rate_factor_dpr(std::vector<probe_infos_t> &candidates, algorithm_context_t &algorithm_context) const;
 
-    int compute_rate_factor_dpr(int before_triggering_rate, int triggering_rate, int n_ip);
-    int compute_probing_rate(int base_probing_rate, const std::vector<probe_infos_t> & groups);
+    int compute_probing_rate(int base_probing_rate, const std::vector<probe_infos_t> & groups, algorithm_context_t & algorithm_context) const;
 };
 
 

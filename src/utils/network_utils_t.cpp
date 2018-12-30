@@ -5,6 +5,7 @@
 #include <rate_limit_analyzer_t.hpp>
 #include <utils/file_utils_t.hpp>
 #include <probe_infos_t.hpp>
+#include <algorithm_context_t.hpp>
 #include "../../include/utils/network_utils_t.hpp"
 
 using namespace Tins;
@@ -29,7 +30,7 @@ namespace utils{
         if (loss_rate == 1 && probing_rate == starting_probing_rate) {
             // Unresponsive
             std::cout << real_target << " is unresponsive \n";
-            triggering_rates[real_target] = 0;
+            triggering_rates[real_target] = starting_probing_rate;
             return false;
         }
 
@@ -104,25 +105,18 @@ namespace utils{
                               const std::pair<double, double> & target_loss_rate_interval,
                               const std::string & output_dir,
                               const std::string & probing_type,
-                              std::unordered_map<std::string, int> & triggering_rates){
-
-        const auto & first_candidate_probe_infos = probes_infos[0];
+                              algorithm_context_t & algorithm_context){
 
 
-        auto real_target = std::string("");
-        if (first_candidate_probe_infos.get_family() == PDU::PDUType::IP){
-            real_target = first_candidate_probe_infos.get_real_target4().to_string();
-        } else if (first_candidate_probe_infos.get_family() == PDU::PDUType::IPv6){
-            real_target = first_candidate_probe_infos.get_real_target6().to_string();
-        }
+        auto real_target = probe_infos.get_real_target();
         auto icmp_type = probe_infos.icmp_type_str();
 
 
         auto is_binary_search = false;
         auto probing_rate = starting_probing_rate;
         auto binary_search_iteration = 0;
-        std::map<int, double> loss_rate_by_probing_rate;
-
+        std::map<int, double> & loss_rate_by_probing_rate = algorithm_context.get_loss_rates_by_ips()[real_target];
+        std::unordered_map<std::string, int> & triggering_rates =  algorithm_context.get_triggering_rates_by_ips();
         while (binary_search_iteration < maximum_binary_search_iteration) {
             if (probing_rate >= maximum_probing_rate || probing_rate < minimum_probing_rate) {
                 std::cout << "No triggering probing rate found for the target loss rate interval ["
@@ -157,6 +151,9 @@ namespace utils{
             }
 
             auto loss_rate = rate_limit_analyzer.compute_loss_rate(real_target);
+
+
+
             bool continue_analyzing = compute_next_probing_rate(loss_rate,
                                                                 real_target,
                                                                 loss_rate_by_probing_rate,
@@ -176,7 +173,7 @@ namespace utils{
         // In case no triggering rate has been found, take the closest value to the triggering rate of the first candidate
         // If it is the first candidate, take the last probing rate of the binary search.
         if (!has_found_triggering_rate){
-            auto closest_probing_rate = find_closest_rate(first_candidate_probe_infos, loss_rate_by_probing_rate, target_loss_rate_interval);
+            auto closest_probing_rate = find_closest_rate(probe_infos, loss_rate_by_probing_rate, target_loss_rate_interval);
             std::cout << "Took the probing rate that triggered the closest loss rate to the target loss rate interval" << closest_probing_rate << "\n";
             triggering_rates[real_target] = closest_probing_rate;
         }

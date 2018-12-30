@@ -160,7 +160,7 @@ void rate_limit_sender_t::start() {
             }
 
             // Hack for working of PlanetLab, there are restriction to packets that are emitted with same IP-ID.
-            if (seq % 10 == 0){
+            if (seq % 5 == 0){
                 ++icmp_id;
             }
 

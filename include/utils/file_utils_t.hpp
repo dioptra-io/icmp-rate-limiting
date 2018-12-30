@@ -19,6 +19,8 @@
 namespace utils{
 
     std::vector<probe_infos_t> parse_input_file(const char * input_file_path);
+    std::pair<double, double> parse_loss_rate_interval(const std::string & loss_rate_interval_str);
+
 
     std::string build_pcap_name(const std::string & folder,
                                 const std::string & icmp_type,

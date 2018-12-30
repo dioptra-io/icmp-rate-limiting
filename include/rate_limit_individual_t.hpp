@@ -28,7 +28,8 @@ public:
             const Tins::NetworkInterface &sniff_interface,
             const probe_infos_t &probe_infos,
             int probing_rate,
-            const std::string &output_dir_individual);
+            const std::string &output_dir_individual,
+            int measurement_time);
 
     void execute_individual_probes(
             const  std::vector<probe_infos_t> &probes_infos,

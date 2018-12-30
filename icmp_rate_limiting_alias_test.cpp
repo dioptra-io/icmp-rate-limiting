@@ -29,7 +29,7 @@ using namespace utils;
 namespace {
 
 
-    auto target_loss_rate_interval = std::pair<double, double> {0.05, 0.20};
+    auto target_loss_rate_interval = std::pair<double, double> {0.10, 0.15};
     auto starting_probing_rate = minimum_probing_rate;
     std::vector<int> custom_rates{1000};
 
@@ -76,6 +76,7 @@ int main(int argc, char * argv[]){
             ("help,h", help_message.c_str())
             ("targets-file,t", po::value<std::string>(), "Format is GROUP_ID, ADDRESS_FAMILY, PROBING_TYPE (DIRECT, INDIRECT), PROTOCOL (tcp, udp, icmp), INTERFACE_TYPE (CANDIDATE, WITNESS),"\
                                                      "REAL_ADDRESS, PROBING_ADDRESS, FLOW_ID (v6), SRC_PORT(v4) , DST_PORT(v4)." )
+            ("target-loss-rate-interval,T", po::value<std::string>(), "Target loss rate interval, [0.10,0.15] by default, format is [lower_bound, upper_bound]")
             ("pcap-individual-dir,i", po::value<std::string>(), "directory for individual probing pcap files")
             ("pcap-group-dir,g", po::value<std::string>(), "directory for group probing pcap files")
             ("pcap-prefix,x", po::value<std::string>(), "pcap_prefix of pcap files")
@@ -87,7 +88,8 @@ int main(int argc, char * argv[]){
             ("use-individual,u", "use individual for group analyse triggering rate")
             ("use-group,U", "use group for group analyse triggering rate")
             ("probe-only,p", "do not analyse, only probe")
-            ("custom-probing-rates,c", "Use custom probing rates");
+            ("custom-probing-rates,c", "Use custom probing rates")
+            ("measurement-time,m", po::value<int>(), "Set the measurement time(and so size of sampling");
 
     po::variables_map vm;
     po::store(po::parse_command_line(argc, argv, desc), vm);
@@ -107,6 +109,18 @@ int main(int argc, char * argv[]){
     } else {
         std::cerr << "Missing targets file. Exiting...\n";
         exit(1);
+    }
+
+    if (vm.count("target-loss-rate-interval")) {
+        auto target_loss_rate_interval_str = vm["target-loss-rate-interval"].as<std::string>();
+
+        // Parse the interval
+        target_loss_rate_interval = parse_loss_rate_interval(target_loss_rate_interval_str);
+
+        std::cout << "Targets loss rate interval is set to "
+                  << "[" << target_loss_rate_interval.first << "," << target_loss_rate_interval.second << "]\n";
+
+
     }
 
     if (vm.count("pcap-individual-dir")) {
@@ -143,7 +157,7 @@ int main(int argc, char * argv[]){
         std::cout << "Only individual probing will be done.\n";
     }
     if (vm.count("individual-only")){
-        options.first_only = true;
+//        options.first_only = true;
         std::cout << "Only first candidate will be probed.\n";
     }
 
@@ -185,6 +199,10 @@ int main(int argc, char * argv[]){
         }
         std::cout << "Custom probing rates will be used.\n";
     }
+    if (vm.count("measurement-time")){
+        options.measurement_time = vm["measurement-time"].as<int>();
+        std::cout << "Measurement time set to " << options.measurement_time << " seconds\n";
+    }
 
 
     auto probes_infos = parse_input_file(targets_file_path.c_str());
@@ -213,7 +231,7 @@ int main(int argc, char * argv[]){
     /**
      * Intialize algorithm context
      */
-    algorithm_context_t algorithm_context;
+    algorithm_context_t algorithm_context(probes_infos);
 
 
 
@@ -231,7 +249,7 @@ int main(int argc, char * argv[]){
                                                                                options,
                                                                                algorithm_context);
             if (!options.individual_only){
-                std::this_thread::sleep_for(std::chrono::seconds(measurement_time + 1));
+                std::this_thread::sleep_for(std::chrono::seconds(options.measurement_time + 1));
             }
         }
 
@@ -243,7 +261,7 @@ int main(int argc, char * argv[]){
                                                    "GROUPSPR",
                                                    options,
                                                    algorithm_context);
-            std::this_thread::sleep_for(std::chrono::seconds(measurement_time + 1));
+            std::this_thread::sleep_for(std::chrono::seconds(options.measurement_time + 1));
             std::cout << "Proceeding to probing groups phase with different probing rate\n";
             rate_limit_group_dpr.execute_group_probes(probes_infos,
                                                        target_loss_rate_interval,

@@ -82,7 +82,7 @@ public:
         rate_limit_sender.start();
 
         // Wait for the last packet to get a possible answer
-        std::this_thread::sleep_for(std::chrono::seconds(1));
+        std::this_thread::sleep_for(std::chrono::seconds(2));
 
         rate_limit_sniffer.set_stop_sniffing(true);
         rate_limit_sniffer.join();

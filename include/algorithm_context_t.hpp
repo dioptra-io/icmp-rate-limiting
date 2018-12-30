@@ -13,11 +13,15 @@
 class algorithm_context_t {
 
 public:
+
+    algorithm_context_t(const std::vector<probe_infos_t> & probes_infos);
+
     std::unordered_map<std::string, std::unique_ptr<rate_limit_analyzer_t>> & get_analyzed_pcap_file();
 
-    int get_triggering_rate() const;
 
-    void set_triggering_rate(int triggering_rate);
+    std::unordered_map<std::string, std::map<int, double>> & get_loss_rates_by_ips();
+
+    std::unordered_map<std::string, int> & get_triggering_rates_by_ips();
 
     bool is_triggering_rate_already_found() const;
 
@@ -31,9 +35,10 @@ public:
 
 private:
     std::unordered_map<std::string, std::unique_ptr<rate_limit_analyzer_t> > analyzed_pcap_file;
-    int  triggering_rate = 0;
     bool triggering_rate_already_found = false;
     bool triggering_rate_found_by_group = false;
+    std::unordered_map<std::string, std::map<int, double>> loss_rates_by_ips;
+    std::unordered_map<std::string, int> triggering_rates_by_ips;
     std::stringstream ostream;
 
 };
