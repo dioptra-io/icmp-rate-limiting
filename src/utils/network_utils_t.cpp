@@ -146,6 +146,8 @@ namespace utils{
                 std::cerr << error.what() << "\n";
                 if (is_binary_search){
                     ++binary_search_iteration;
+                }else {
+                    break;
                 }
                 continue;
             }
@@ -174,7 +176,7 @@ namespace utils{
         // If it is the first candidate, take the last probing rate of the binary search.
         if (!has_found_triggering_rate){
             auto closest_probing_rate = find_closest_rate(probe_infos, loss_rate_by_probing_rate, target_loss_rate_interval);
-            std::cout << "Took the probing rate that triggered the closest loss rate to the target loss rate interval" << closest_probing_rate << "\n";
+            std::cout << "Took the probing rate that triggered the closest loss rate to the target loss rate interval " << closest_probing_rate << "\n";
             triggering_rates[real_target] = closest_probing_rate;
         }
 

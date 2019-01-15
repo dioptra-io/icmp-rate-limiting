@@ -11,6 +11,14 @@
 #include <algorithm>
 
 namespace utils{
+    struct pairhash {
+    public:
+        template <typename T, typename U>
+        std::size_t operator()(const std::pair<T, U> &x) const
+        {
+            return std::hash<T>()(x.first) ^ std::hash<U>()(x.second);
+        }
+    };
     template<typename Map>
     std::vector<typename Map::mapped_type> values(const Map & map){
         std::vector<typename Map::mapped_type> result;

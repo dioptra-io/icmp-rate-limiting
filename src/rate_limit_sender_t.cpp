@@ -11,6 +11,7 @@
 
 #include <rate_limit_sender_t.hpp>
 #include <utils/maths_utils_t.hpp>
+#include <boost/concept_check.hpp>
 
 using namespace utils;
 using namespace Tins;
@@ -58,29 +59,84 @@ rate_limit_sender_t::rate_limit_sender_t(const rate_limit_sender_t &copy_rate_li
 //    sender.set_buffer_size(sender.get_buffer_size(SO_SNDBUF) * 256);
 }
 
-std::vector<IP> rate_limit_sender_t::build_probing_pattern4() {
+std::vector<IP> rate_limit_sender_t::build_probing_pattern4(int nb_probes) {
     std::vector<IP> probing_pattern;
-    for (const auto & candidate : candidates){
-        for (int i = 0; i < candidate.get_probing_rate(); ++i){
-            probing_pattern.push_back(candidate.get_packet4());
+    std::default_random_engine random_engine;
+    while (probing_pattern.size() < nb_probes){
+        std::vector<IP> batch;
+        for (const auto & candidate : candidates){
+            for (int i = 0; i < candidate.get_probing_rate(); ++i){
+                batch.push_back(candidate.get_packet4());
+            }
+        }
+
+        std::shuffle(std::begin(batch), std::end(batch), random_engine);
+        for (auto & packet : batch){
+            probing_pattern.push_back(std::move(packet));
         }
     }
 
-    std::default_random_engine random_engine;
-    std::shuffle(std::begin(probing_pattern), std::end(probing_pattern), random_engine);
+
+    uint16_t start_ip_id = 34232;
+
+    uint16_t seq = 1;
+    uint16_t ip_id = start_ip_id;
+    uint16_t icmp_id = 1;
+    for (int i = 0; i < probing_pattern.size(); ++i, ++seq) {
+        probing_pattern[i].id(ip_id);
+        // Hack for working of PlanetLab, there are restriction to packets that are emitted with same IP-ID.
+        if (seq % 5 == 0) {
+            ++icmp_id;
+        }
+        auto icmp = probing_pattern[i].find_pdu<ICMP>();
+        if (icmp != nullptr){
+            icmp->id(icmp_id);
+            icmp->sequence(seq);
+        } else {
+            probing_pattern[i].id(seq);
+        }
+    }
     return probing_pattern;
 }
 
-std::vector<IPv6> rate_limit_sender_t::build_probing_pattern6() {
+std::vector<IPv6> rate_limit_sender_t::build_probing_pattern6(int nb_probes) {
     std::vector<IPv6> probing_pattern;
-    for (const auto & candidate : candidates){
-        for (int i = 0; i < candidate.get_probing_rate(); ++i){
-            probing_pattern.push_back(candidate.get_packet6());
+    std::default_random_engine random_engine;
+    while (probing_pattern.size() < nb_probes){
+        std::vector<IPv6> batch;
+        for (const auto & candidate : candidates){
+            for (int i = 0; i < candidate.get_probing_rate(); ++i){
+                batch.push_back(candidate.get_packet6());
+            }
+        }
+
+        std::shuffle(std::begin(batch), std::end(batch), random_engine);
+        for (auto & packet : batch){
+            probing_pattern.push_back(std::move(packet));
         }
     }
 
-    std::default_random_engine random_engine;
-    std::shuffle(std::begin(probing_pattern), std::end(probing_pattern), random_engine);
+    uint16_t start_ip_id = 34232;
+
+    uint16_t seq = 1;
+    uint16_t ip_id = start_ip_id;
+    uint16_t icmp_id = 1;
+
+    for (int i = 0; i < probing_pattern.size(); ++i, ++seq) {
+        if (seq % 5 == 0) {
+            ++icmp_id;
+        }
+        auto icmp = probing_pattern[i].find_pdu<ICMPv6>();
+        if (icmp != nullptr){
+            icmp->identifier(icmp_id);
+            icmp->sequence(seq);
+        } else {
+
+        }
+    }
+
+
+
     return probing_pattern;
 }
 
@@ -105,22 +161,22 @@ void rate_limit_sender_t::start() {
 
         if (candidates[0].get_family() == PDU::PDUType::IP){
             auto probe_to_send = warmup_probe;
-            auto icmp = probe_to_send.find_pdu<ICMP>();
-            if (icmp != nullptr) {
-                icmp->id(1);
-                icmp->sequence(i);
-            } else {
-                probe_to_send.id(i);
-            }
+//            auto icmp = probe_to_send.find_pdu<ICMP>();
+//            if (icmp != nullptr) {
+//                icmp->id(1);
+//                icmp->sequence(i);
+//            } else {
+//                probe_to_send.id(i);
+//            }
 
             sender.send(probe_to_send);
         } else if (candidates[0].get_family() == PDU::PDUType::IPv6){
             auto probe_to_send = warmup_probe6;
-            auto icmp = probe_to_send.find_pdu<ICMPv6>();
-            if (icmp != nullptr){
-                icmp->identifier(1);
-                icmp->sequence(i);
-            }
+//            auto icmp = probe_to_send.find_pdu<ICMPv6>();
+//            if (icmp != nullptr){
+//                icmp->identifier(1);
+//                icmp->sequence(i);
+//            }
             sender.send(probe_to_send);
         }
 
@@ -134,50 +190,33 @@ void rate_limit_sender_t::start() {
     if (loop_overhead < interval){
         interval -= loop_overhead;
     } else{
-        interval = 3;
+        interval = 1;
     }
 
 
     std::cout << "Loop overhead is: " << loop_overhead <<" us\n";
 
 
-    auto start = std::chrono::high_resolution_clock::now();
     // v4
     if (candidates[0].get_family() == PDU::PDUType::IP){
         // Initialization of the pattern that will be sent.
-        auto probing_pattern = build_probing_pattern4();
+        auto probing_pattern = build_probing_pattern4(nb_probes);
+
+        auto start = std::chrono::high_resolution_clock::now();
 
 
-
-        uint16_t seq = 1;
-        uint16_t ip_id = start_ip_id;
-        uint16_t icmp_id = 1;
-
-
-        for (int i = 0; probe_sent < nb_probes; ++i, ++probe_sent, ++seq){
-            if (seq == 0){
-                ++ip_id;
+        for (int i = 0; i < probing_pattern.size(); ++i){
+//            std::cout << static_cast<ICMP*>(probing_pattern[i].inner_pdu())->id() << "\n";
+//            std::cout << static_cast<ICMP*>(probing_pattern[i].inner_pdu())->sequence() << "\n";
+            try{
+                sender.send(probing_pattern[i]);
+            } catch (const socket_write_error & e){
+                std::cout << e.what() << "\n";
             }
-
-            // Hack for working of PlanetLab, there are restriction to packets that are emitted with same IP-ID.
-            if (seq % 5 == 0){
-                ++icmp_id;
-            }
-
-            auto probe_to_send = probing_pattern[i%probing_pattern.size()];
-            auto icmp = probe_to_send.find_pdu<ICMP>();
-            if (icmp != nullptr){
-                icmp->id(icmp_id);
-                icmp->sequence(seq);
-            } else {
-                probe_to_send.id(seq);
-            }
-
-            sender.send(probe_to_send);
 
 
             wait_loop(interval);
-            if (probe_sent == nb_probes - 1){
+            if (i == nb_probes - 1){
                 auto end = std::chrono::high_resolution_clock::now();
                 std::chrono::duration<double, std::milli> elapsed = end-start;
                 std::cout << "Sending took " << elapsed.count() << " ms\n";
@@ -188,28 +227,15 @@ void rate_limit_sender_t::start() {
     }  else if (candidates[0].get_family() == PDU::PDUType::IPv6){
 
         // Initialization of the pattern that will be sent.
-        auto probing_pattern = build_probing_pattern6();
-        uint16_t seq = 1;
-        uint16_t ip_id = start_ip_id;
+        auto probing_pattern = build_probing_pattern6(nb_probes);
+        auto start = std::chrono::high_resolution_clock::now();
 
-        for (int i = 0; probe_sent < nb_probes; ++i, ++probe_sent, ++seq){
-            if (seq == 0){
-                ++ip_id;
-            }
-            auto probe_to_send = probing_pattern[i%probing_pattern.size()];
-            auto icmp = probe_to_send.find_pdu<ICMPv6>();
-            if (icmp != nullptr){
-                icmp->identifier(ip_id);
-                icmp->sequence(seq);
-            } else {
+        for (int i = 0; i < probing_pattern.size(); ++i){
 
-            }
-
-            sender.send(probe_to_send);
-
+            sender.send(probing_pattern[i]);
 
             wait_loop(interval);
-            if (probe_sent == nb_probes - 1){
+            if (i == nb_probes - 1){
                 auto end = std::chrono::high_resolution_clock::now();
                 std::chrono::duration<double, std::milli> elapsed = end-start;
                 std::cout << "Sending took " << elapsed.count() << " ms\n";

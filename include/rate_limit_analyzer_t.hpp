@@ -9,6 +9,7 @@
 #include <unordered_map>
 #include <tins/tins.h>
 
+#include <utils/container_utils_t.hpp>
 #include <utils/struct_utils_t.hpp>
 #include <utils/maths_utils_t.hpp>
 #include <rate_limit_estimate_t.hpp>
@@ -145,7 +146,7 @@ private:
     responsiveness_t<std::string> packets_per_interface;
     std::vector<Tins::Packet> outgoing_packets;
     std::vector<Tins::Packet> icmp_replies;
-
+    std::unordered_map<std::pair<uint16_t, uint16_t>,std::vector<Tins::Packet>, utils::pairhash> match_icmp_replies;
 
 
 };

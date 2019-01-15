@@ -37,12 +37,12 @@ void rate_limit_sniffer_t::start() {
         filter_stream << "icmp6";
     }
 
-    for (const auto & destination: destinations4) {
-        filter_stream << " or (dst " + destination.to_string() + ")";
-    }
-    for (const auto & destination: destinations6) {
-        filter_stream << " or (dst " + destination.to_string() + ")";
-    }
+//    for (const auto & destination: destinations4) {
+//        filter_stream << " or (dst " + destination.to_string() + ")";
+//    }
+//    for (const auto & destination: destinations6) {
+//        filter_stream << " or (dst " + destination.to_string() + ")";
+//    }
     config.set_filter(filter_stream.str());
     sniffer_ptr = std::make_unique<Sniffer>(interface.name(), config);
     // Launch sniffing thread.

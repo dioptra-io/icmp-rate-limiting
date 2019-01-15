@@ -52,7 +52,7 @@ private:
      */
     int compute_low_rate_dpr(const probe_infos_t &first_candidate, const probe_infos_t &other_candidate,
                              algorithm_context_t &algorithm_context) const ;
-    int compute_rate_factor_dpr(std::vector<probe_infos_t> &candidates, algorithm_context_t &algorithm_context) const;
+    int compute_rate_factor_dpr(std::vector<probe_infos_t> &candidates, algorithm_context_t &algorithm_context, const utils::options_t &) const;
 
     int compute_probing_rate(int base_probing_rate, const std::vector<probe_infos_t> & groups, algorithm_context_t & algorithm_context) const;
 };

@@ -19,17 +19,6 @@
 using namespace Tins;
 using namespace utils;
 
-namespace{
-    struct pairhash {
-    public:
-        template <typename T, typename U>
-        std::size_t operator()(const std::pair<T, U> &x) const
-        {
-            return std::hash<T>()(x.first) ^ std::hash<U>()(x.second);
-        }
-    };
-}
-
 void rate_limit_group_t::execute_group_probes(const NetworkInterface & sniff_interface,
                            const std::vector<probe_infos_t> & group,
                            int probing_rate,
@@ -148,7 +137,7 @@ void rate_limit_group_t::execute_group_probes(const std::vector<probe_infos_t> &
 
                 // Change the rate of the candidates by ratio_rate
                 group_t group_different_rates(group.begin(), group.end());
-                probing_rate = compute_rate_factor_dpr(group_different_rates, algorithm_context);
+                probing_rate = compute_rate_factor_dpr(group_different_rates, algorithm_context, options);
 
 
 
@@ -341,7 +330,7 @@ void rate_limit_group_t::analyse_group_probes(
             if (group_type == "GROUPSPR"){
                 probing_rate = compute_probing_rate(triggering_rate, group.second, algorithm_context);
             } else if (group_type == "GROUPDPR"){
-                probing_rate = compute_rate_factor_dpr(group.second, algorithm_context);
+                probing_rate = compute_rate_factor_dpr(group.second, algorithm_context, options);
             }
 
         }
@@ -355,7 +344,7 @@ void rate_limit_group_t::analyse_group_probes(
                 if (group_type == "GROUPSPR"){
                     probing_rate = compute_probing_rate(triggering_rate, group.second, algorithm_context);
                 } else if (group_type == "GROUPDPR"){
-                    probing_rate = compute_rate_factor_dpr(group.second, algorithm_context);
+                    probing_rate = compute_rate_factor_dpr(group.second, algorithm_context, options);
                 }
 
             }
@@ -397,7 +386,8 @@ int rate_limit_group_t::compute_low_rate_dpr(const probe_infos_t &first_candidat
 }
 
 int rate_limit_group_t::compute_rate_factor_dpr(std::vector<probe_infos_t> &probes_infos,
-                                                 algorithm_context_t &algorithm_context) const {
+                                                algorithm_context_t &algorithm_context,
+                                                const options_t & options) const {
 
     auto total_probing_rate = 0;
 
@@ -409,15 +399,15 @@ int rate_limit_group_t::compute_rate_factor_dpr(std::vector<probe_infos_t> &prob
 
     for (int i = 1; i < probes_infos.size(); ++i){
         auto low_rate = compute_low_rate_dpr(first_candidate, probes_infos[i], algorithm_context);
-        if (low_rate < 10){
-            low_rate = 10;
-        }
+//        if (low_rate < options.low_rate_dpr){
+        low_rate = options.low_rate_dpr;
+//        }
         total_probing_rate += low_rate;
         auto rate_factor = high_rate / low_rate;
         rate_factor = std::max(rate_factor, 2);
         rate_factors.push_back(rate_factor);
 
-        std::cout << "Low rate: " << low_rate <<"\n";
+//        std::cout << "Low rate: " << low_rate <<"\n";
 
     }
 
@@ -429,7 +419,7 @@ int rate_limit_group_t::compute_rate_factor_dpr(std::vector<probe_infos_t> &prob
 
     first_candidate.set_probing_rate(lcm_rates);
     for (int i = 1; i < probes_infos.size(); ++i){
-        std::cout << "Low rate factor for " << probes_infos[i].get_real_target() << ": " << rate_factors[i-1]/gcd_rates << "\n";
+//        std::cout << "Low rate factor for " << probes_infos[i].get_real_target() << ": " << rate_factors[i-1]/gcd_rates << "\n";
         probes_infos[i].set_probing_rate(rate_factors[i-1]/gcd_rates);
     }
 

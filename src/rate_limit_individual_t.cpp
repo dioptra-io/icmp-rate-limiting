@@ -148,6 +148,7 @@ void rate_limit_individual_t::execute_individual_probes(
                                                               binary_search_iteration);
 
             if (!continue_probing){
+                std::this_thread::sleep_for(std::chrono::seconds(options.measurement_time + 1));
                 break;
             }
 
@@ -194,9 +195,9 @@ std::stringstream rate_limit_individual_t::analyse_individual_probes(
 
     std::vector<probe_infos_t> probes_infos;
     probes_infos.push_back(probe_infos);
-    auto  rate_limit_analyzer = rate_limit_analyzer_t::build_rate_limit_analyzer_t_from_probe_infos(probes_infos);
 
-    auto it = algorithm_context.get_analyzed_pcap_file().find(pcap_file);
+    auto  rate_limit_analyzer = rate_limit_analyzer_t::build_rate_limit_analyzer_t_from_probe_infos(probes_infos);
+        auto it = algorithm_context.get_analyzed_pcap_file().find(pcap_file);
     if ( it != algorithm_context.get_analyzed_pcap_file().end()){
         rate_limit_analyzer = *(it->second);
     }

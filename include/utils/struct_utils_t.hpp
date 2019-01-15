@@ -30,6 +30,7 @@ namespace utils{
         std::string pcap_dir_individual = "";
         std::string pcap_dir_groups = "";
         int measurement_time = 5;
+        int low_rate_dpr = 10;
     };
 
     enum class probing_style_t {DIRECT, INDIRECT, UNKNOWN};

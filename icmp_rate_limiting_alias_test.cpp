@@ -89,7 +89,8 @@ int main(int argc, char * argv[]){
             ("use-group,U", "use group for group analyse triggering rate")
             ("probe-only,p", "do not analyse, only probe")
             ("custom-probing-rates,c", "Use custom probing rates")
-            ("measurement-time,m", po::value<int>(), "Set the measurement time(and so size of sampling");
+            ("measurement-time,m", po::value<int>(), "Set the measurement time(and so size of sampling")
+            ("low-rate-dpr,r", po::value<int>(), "Set the measurement low rate for different probing rate phase");
 
     po::variables_map vm;
     po::store(po::parse_command_line(argc, argv, desc), vm);
@@ -202,6 +203,10 @@ int main(int argc, char * argv[]){
     if (vm.count("measurement-time")){
         options.measurement_time = vm["measurement-time"].as<int>();
         std::cout << "Measurement time set to " << options.measurement_time << " seconds\n";
+    }
+    if (vm.count("low-rate-dpr")){
+        options.low_rate_dpr = vm["low-rate-dpr"].as<int>();
+        std::cout << "Low rate dpr set to " << options.low_rate_dpr<< " packets per seconds\n";
     }
 
 

@@ -23,8 +23,8 @@ public:
     void start();
 
 private:
-    std::vector<Tins::IP> build_probing_pattern4();
-    std::vector<Tins::IPv6> build_probing_pattern6();
+    std::vector<Tins::IP> build_probing_pattern4(int nb_probes);
+    std::vector<Tins::IPv6> build_probing_pattern6(int nb_probes);
 
     int nb_probes;
     int probing_rate;
