@@ -23,6 +23,9 @@ public:
 
     using intervals_t = std::tuple<bool, double, double>;
 
+    enum class change_point_type_t{
+        MEAN, VAR
+    };
     /**
      * Constructors
      */
@@ -80,7 +83,11 @@ public:
      */
     std::unordered_map<std::string, int> compute_icmp_change_point() const;
 
-    int compute_icmp_change_point(const std::string &) const;
+    int compute_change_point(const std::string &) const;
+    int compute_change_point(const std::vector<int> &data, change_point_type_t) const;
+
+    std::pair<std::vector<int>, std::vector<int>> adjust_time_series_length(const std::string & ip_address1,
+            const std::string & ip_address2);
 
 
     /**
@@ -131,8 +138,7 @@ private:
 
     void dump_transition_matrix(const gilbert_elliot_t & loss_model);
     void sort_by_timestamp(std::vector<Tins::Packet> &packets);
-    int compute_icmp_change_point(const std::vector<utils::responsive_info_probe_t> &data) const;
-
+    int compute_change_point(const std::vector<utils::responsive_info_probe_t> &data, change_point_type_t) const;
 
 //    std::vector<intervals_t> compute_responsiveness();
     // Analysis

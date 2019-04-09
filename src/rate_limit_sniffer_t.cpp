@@ -30,6 +30,10 @@ void rate_limit_sniffer_t::set_stop_sniffing(bool new_stop_sniffing) {
 void rate_limit_sniffer_t::start() {
     Tins::SnifferConfiguration config;
     config.set_immediate_mode(true);
+    unsigned int buffer_size = 200000 * 1024;
+    std::cout << "Setting buffer receive size to " << buffer_size << "...";
+    config.set_buffer_size(buffer_size);
+    std::cout << "OK\n";
     std::stringstream filter_stream;
     if (!destinations4.empty()){
         filter_stream << "icmp";
@@ -49,6 +53,7 @@ void rate_limit_sniffer_t::start() {
     sniffer_thread = std::thread{([&]() {
         sniffer_ptr->sniff_loop(utils::make_sniffer_handler(this,  &rate_limit_sniffer_t::handler));
     })};
+    std::cout << "Sniffer started\n";
 }
 
 
@@ -68,15 +73,7 @@ const std::string &rate_limit_sniffer_t::get_pcap_file() const  {
 
 void rate_limit_sniffer_t::join() {
     // Send a last ping packet here to receive a packet and stop the thread
-    PacketSender sender;
-    std::unique_ptr<PDU> kill_thread_packet;
-    if (!destinations4.empty()){
-        kill_thread_packet = std::make_unique<IP>(IP(*destinations4.begin())/ICMP());
-    }
-    else if (!destinations6.empty()){
-        kill_thread_packet = std::make_unique<IPv6>(IPv6(*destinations6.begin())/ICMPv6());
-    }
-    sender.send(*kill_thread_packet);
+    sniffer_ptr->stop_sniff();
     sniffer_thread.join();
     // Write the results into a file.
     Tins::PacketWriter packet_writer{pcap_file, Tins::DataLinkType<Tins::EthernetII>()};

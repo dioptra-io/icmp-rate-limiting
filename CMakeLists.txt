@@ -1,6 +1,14 @@
 cmake_minimum_required(VERSION 2.8)
 project(ICMPRateLimiting)
 
+if(NOT CMAKE_BUILD_TYPE)
+    set(CMAKE_BUILD_TYPE Release)
+endif()
+
+set(CMAKE_CXX_FLAGS "-Wall -Wextra")
+set(CMAKE_CXX_FLAGS_DEBUG "-g")
+set(CMAKE_CXX_FLAGS_RELEASE "-O3")
+
 set(CMAKE_CXX_STANDARD 14)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
@@ -17,6 +25,7 @@ set(Boost_USE_STATIC_RUNTIME OFF)
 if(APPLE)
     # Mojave has removed /usr/local/lib from library path?
     link_directories(/usr/local/lib/)
+#    set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -stdlib=libc++ -lc++abi")
 endif()
 find_package(Boost REQUIRED COMPONENTS filesystem system iostreams program_options)
 

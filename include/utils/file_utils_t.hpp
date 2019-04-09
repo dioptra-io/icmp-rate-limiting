@@ -20,6 +20,8 @@ namespace utils{
 
     std::vector<probe_infos_t> parse_input_file(const char * input_file_path);
     std::pair<double, double> parse_loss_rate_interval(const std::string & loss_rate_interval_str);
+    std::unordered_map<std::string, int> parse_individual_result_file(const std::string & individual_result_file,
+                                                                      const std::pair<double,double> & target_loss_rate_interval);
 
 
     std::string build_pcap_name(const std::string & folder,

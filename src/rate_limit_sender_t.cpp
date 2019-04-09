@@ -20,14 +20,14 @@ namespace{
 
     void wait_loop(int interval){
         bool sleep = true;
-        auto start_loop = std::chrono::system_clock::now();
+        auto start_loop = std::chrono::high_resolution_clock::now();
 
         // This is an active waiting but more precise than sleep().
         while(sleep)
         {
-            auto now = std::chrono::system_clock::now();
-            auto elapsed = std::chrono::duration_cast<std::chrono::microseconds>(now - start_loop);
-            if ( elapsed.count() > interval ){
+            auto now = std::chrono::high_resolution_clock::now();
+            auto elapsed = std::chrono::duration_cast<std::chrono::nanoseconds>(now - start_loop);
+            if ( elapsed.count() >= interval ){
                 sleep = false;
             }
 
@@ -143,11 +143,13 @@ std::vector<IPv6> rate_limit_sender_t::build_probing_pattern6(int nb_probes) {
 void rate_limit_sender_t::start() {
 
         // 1 packet / interval
-    auto interval = 1000000/probing_rate;
+    auto interval = 1000000000/probing_rate;
 
     int probe_sent = 0;
 
     std::vector<double> loop_overheads;
+
+    std::cout << "Starting warmup...";
 
     IP warmup_probe {NetworkInterface::default_interface().ipv4_address(), NetworkInterface::default_interface().ipv4_address()};
     IPv6 warmup_probe6 {NetworkInterface::default_interface().ipv6_addresses()[0].address,
@@ -182,7 +184,7 @@ void rate_limit_sender_t::start() {
 
 
         auto end_send_packet = std::chrono::high_resolution_clock::now();
-        loop_overheads.push_back(std::chrono::duration<double, std::micro> (end_send_packet-start_send_packet).count());
+        loop_overheads.push_back(std::chrono::duration<double, std::nano> (end_send_packet-start_send_packet).count());
     }
 
     // Adjust the sleep time according to the loop overhead
@@ -193,8 +195,11 @@ void rate_limit_sender_t::start() {
         interval = 1;
     }
 
+    if (interval < 1){
+        interval = 1;
+    }
 
-    std::cout << "Loop overhead is: " << loop_overhead <<" us\n";
+    std::cout << "OK.\nInterval between each probe is " << interval << " ns\n";
 
 
     // v4
@@ -214,8 +219,9 @@ void rate_limit_sender_t::start() {
                 std::cout << e.what() << "\n";
             }
 
-
-            wait_loop(interval);
+            if (probing_rate < 1000000){
+                wait_loop(interval);
+            }
             if (i == nb_probes - 1){
                 auto end = std::chrono::high_resolution_clock::now();
                 std::chrono::duration<double, std::milli> elapsed = end-start;
@@ -232,9 +238,15 @@ void rate_limit_sender_t::start() {
 
         for (int i = 0; i < probing_pattern.size(); ++i){
 
-            sender.send(probing_pattern[i]);
+            try{
+                sender.send(probing_pattern[i]);
+            } catch (const socket_write_error & e){
+                std::cout << e.what() << "\n";
+            }
 
-            wait_loop(interval);
+            if (probing_rate < 1000000){
+                wait_loop(interval);
+            }
             if (i == nb_probes - 1){
                 auto end = std::chrono::high_resolution_clock::now();
                 std::chrono::duration<double, std::milli> elapsed = end-start;

@@ -52,7 +52,7 @@ IP build_icmp_triggering_probe(const IPv4Address & dst_ip, const IPv4Address & s
 std::string to_string(const std::vector<icmp_trigger_probes_t> & alias_test){
     std::stringstream ss;
     ss << "[";
-    for (int i = 0; i < alias_test.size(); ++i){
+    for (std::size_t i = 0; i < alias_test.size(); ++i){
         if (i != 0){
             ss << ", ";
         }
@@ -65,7 +65,7 @@ std::string to_string(const std::vector<icmp_trigger_probes_t> & alias_test){
 
 std::string to_file_name (const std::vector<icmp_trigger_probes_t> & alias_test, char separator){
     std::stringstream ss;
-    for (int i = 0; i < alias_test.size(); ++i){
+    for (std::size_t i = 0; i < alias_test.size(); ++i){
 
         if (i != 0){
             ss << separator;

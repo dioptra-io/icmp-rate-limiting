@@ -29,6 +29,14 @@ namespace utils{
     int flow_sport_index = 8;
     int flow_dport_index = 9;
 
+    // The format of individual result file is the following:
+    // IP ADDRESS, INDIVIDUAL, PROBING_RATE, CHANGING_POINT, LOSS_RATE, TRANSITION_MATRIX_0_0, TRANSITION_MATRIX_0_1,
+    // TRANSITION_MATRIX_1_0, TRANSITION_MATRIX_1_1
+    int ip_address_index = 0;
+    int triggering_rate_index = 2;
+    int loss_rate_index = 4;
+
+
 
     uint16_t default_sport = 24000;
     uint16_t default_dport = 33435;
@@ -99,6 +107,17 @@ namespace utils{
         std::ifstream input_file(input_file_path);
 
         std::string line;
+
+
+        const std::string tcp_str = "tcp";
+        const std::string udp_str = "udp";
+        const std::string icmp_str = "icmp";
+        const std::string CANDIDATE = "CANDIDATE";
+        const std::string WITNESS = "WITNESS";
+        const std::string v4_str = "4";
+        const std::string v6_str = "6";
+
+
         while (std::getline(input_file, line))
         {
             if (line == std::string("")){
@@ -131,11 +150,11 @@ namespace utils{
             }
 
             PDU::PDUType protocol (PDU::PDUType::UNKNOWN);
-            if (tokens[protocol_index] == std::string("tcp")){
+            if (tokens[protocol_index] == tcp_str){
                 protocol = PDU::PDUType::TCP;
-            } else if (tokens[protocol_index] == std::string("udp")){
+            } else if (tokens[protocol_index] == udp_str){
                 protocol = PDU::PDUType::UDP;
-            } else if (tokens[protocol_index] == std::string("icmp")){
+            } else if (tokens[protocol_index] == icmp_str){
                 protocol = PDU::PDUType::ICMP;
             }
             if (protocol == PDU::PDUType::UNKNOWN){
@@ -147,9 +166,9 @@ namespace utils{
             // Set the interface_type
             interface_type_t interface_type (interface_type_t ::UNKNOWN);
 
-            if (tokens[interface_type_index] == std::string("CANDIDATE")){
+            if (tokens[interface_type_index] == CANDIDATE){
                 interface_type = interface_type_t::CANDIDATE;
-            } else if (tokens[interface_type_index] == std::string("WITNESS")){
+            } else if (tokens[interface_type_index] == WITNESS){
                 interface_type = interface_type_t::WITNESS;
             }
             if (interface_type == interface_type_t::UNKNOWN){
@@ -161,17 +180,17 @@ namespace utils{
 
             IP probe;
             IPv6 probe6;
-            if (address_family == std::string("4")){
+            if (address_family == v4_str){
                 // Set the real address
                 IPv4Address real_address {tokens[real_address_index]};
                 // Do not add if address already in the vector.
-                auto is_already_in_addresses_it = std::find_if(probes_infos.begin(), probes_infos.end(), [&real_address](const auto & probe_infos){
-                   return probe_infos.get_real_target() == real_address.to_string();
-                });
-
-                if (is_already_in_addresses_it != probes_infos.end()){
-                    continue;
-                }
+//                auto is_already_in_addresses_it = std::find_if(probes_infos.begin(), probes_infos.end(), [&real_address](const auto & probe_infos){
+//                   return probe_infos.get_real_target() == real_address.to_string();
+//                });
+//
+//                if (is_already_in_addresses_it != probes_infos.end()){
+//                    continue;
+//                }
 
                 // Set the probing address
                 IPv4Address probing_address {tokens[probing_address_index]};
@@ -208,7 +227,7 @@ namespace utils{
 
                 probes_infos.emplace_back(group_id, 1, probe, real_address, protocol,  probing_style, interface_type);
 
-            } else if (address_family == std::string("6")){
+            } else if (address_family == v6_str){
                 // Set the real address
                 IPv6Address real_address {tokens[real_address_index]};
                 auto is_already_in_addresses_it = std::find_if(probes_infos.begin(), probes_infos.end(), [&real_address](const auto & probe_infos){
@@ -295,6 +314,41 @@ namespace utils{
 
         return loss_rate_interval;
 
+    }
+
+    std::unordered_map<std::string, int> parse_individual_result_file(const std::string & individual_result_file,
+            const std::pair<double,double> & target_loss_rate_interval){
+
+        std::unordered_map<std::string, int> triggering_rates_by_ips;
+
+        std::ifstream input_file(individual_result_file);
+
+        std::string line;
+
+        while (std::getline(input_file, line)) {
+            if (line == std::string("")) {
+                continue;
+            }
+            line.erase(std::remove_if(line.begin(), line.end(), isspace), line.end());
+
+            std::istringstream to_split(line);
+            std::vector<std::string> tokens;
+            std::string token;
+            while (std::getline(to_split, token, ',')) {
+                tokens.emplace_back(token);
+            }
+
+            auto ip_address = tokens[ip_address_index];
+            auto triggering_rate = std::atoi(tokens[triggering_rate_index].c_str());
+            auto loss_rate = std::atof(tokens[loss_rate_index].c_str());
+
+            if (target_loss_rate_interval.first <= loss_rate && loss_rate <= target_loss_rate_interval.second){
+                triggering_rates_by_ips[ip_address] = triggering_rate;
+            }
+
+
+        }
+        return triggering_rates_by_ips;
     }
 
 }

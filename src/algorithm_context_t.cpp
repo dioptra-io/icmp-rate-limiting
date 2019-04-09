@@ -46,4 +46,9 @@ std::unordered_map<std::string, int> & algorithm_context_t::get_triggering_rates
     return triggering_rates_by_ips;
 }
 
+void
+algorithm_context_t::set_triggering_rates_by_ips(const std::unordered_map<std::string, int> &triggering_rates_by_ips) {
+    algorithm_context_t::triggering_rates_by_ips = triggering_rates_by_ips;
+}
+
 

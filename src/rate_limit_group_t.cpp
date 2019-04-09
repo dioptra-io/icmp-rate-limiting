@@ -70,6 +70,7 @@ void rate_limit_group_t::execute_group_probes(const std::vector<probe_infos_t> &
      * Start probing
      */
     auto sniff_interface = NetworkInterface::default_interface();
+    std::cout << "Using interface: " << sniff_interface.name() << "\n";
 
     std::unordered_map<std::string, int> & triggering_rates = algorithm_context.get_triggering_rates_by_ips();
 
@@ -90,7 +91,7 @@ void rate_limit_group_t::execute_group_probes(const std::vector<probe_infos_t> &
         } else {
             if (options.use_individual_for_analyse){
 
-                probing_rate = find_triggering_rate(group[0], group, minimum_probing_rate, target_loss_rate_interval,
+                probing_rate = find_triggering_rate(group[0], group, options.starting_probing_rate, target_loss_rate_interval,
                         options.pcap_dir_individual, "INDIVIDUAL", algorithm_context);
                 algorithm_context.set_triggering_rate_already_found(true);
 
@@ -100,7 +101,7 @@ void rate_limit_group_t::execute_group_probes(const std::vector<probe_infos_t> &
 
 
             } else if (options.use_group_for_analyse){
-                probing_rate = compute_probing_rate(minimum_probing_rate, group, algorithm_context);
+                probing_rate = compute_probing_rate(options.starting_probing_rate, group, algorithm_context);
             }
 
         }
@@ -122,7 +123,7 @@ void rate_limit_group_t::execute_group_probes(const std::vector<probe_infos_t> &
 
         while(binary_search_iteration < maximum_binary_search_iteration) {
 
-            if (probing_rate >= maximum_probing_rate || probing_rate < minimum_probing_rate) {
+            if (probing_rate >= maximum_probing_rate || probing_rate < options.starting_probing_rate) {
                 std::cout << "No triggering probing rate found for the target loss rate interval ["
                           << target_loss_rate_interval.first
                           << ", " << target_loss_rate_interval.second << "] for " << real_target_str << "\n";
@@ -169,7 +170,7 @@ void rate_limit_group_t::execute_group_probes(const std::vector<probe_infos_t> &
                                                                   real_target_str,
                                                                   loss_rate_by_probing_rate,
                                                                   probing_rate,
-                                                                  minimum_probing_rate,
+                                                                  options.starting_probing_rate,
                                                                   triggering_rates,
                                                                   target_loss_rate_interval,
                                                                   is_binary_search,
@@ -223,6 +224,7 @@ std::stringstream rate_limit_group_t::analyse_group_probes(
     }
 
     std::unordered_map<std::pair<std::string, std::string>, double, pairhash> correlations;
+    std::unordered_map<std::string, int> change_points;
 
     // Extract correlation
 
@@ -244,11 +246,30 @@ std::stringstream rate_limit_group_t::analyse_group_probes(
     else if (group_type == "GROUPDPR"){
         // First candidate is the high rate one
         auto ip_address_high_rate = group[0].get_real_target();
-        for (int i = 1; i < group.size(); ++i) {
+        auto transition_matrix_high_rate = rate_limit_analyzer.compute_loss_model(ip_address_high_rate);
+        rate_limit_analyzer_t::change_point_type_t cp_type {rate_limit_analyzer_t::change_point_type_t::MEAN};
+
+        if (transition_matrix_high_rate.transition(1,1) < 0.8){
+            cp_type = rate_limit_analyzer_t::change_point_type_t::VAR;
+        }
+
+        for (std::size_t i = 1; i < group.size(); ++i) {
+            // Correlations
             auto ip_address_i = group[i].get_real_target();
             auto correlation = rate_limit_analyzer.correlation_high_low(ip_address_high_rate, ip_address_i);
             correlations[std::make_pair(ip_address_high_rate, ip_address_i)] = correlation;
             correlations[std::make_pair(ip_address_i, ip_address_high_rate)] = correlation;
+
+            // Change point
+            auto time_series_adjusted = rate_limit_analyzer.adjust_time_series_length(ip_address_high_rate, ip_address_i);
+
+            if (change_points.find(ip_address_high_rate) == change_points.end()){
+                auto change_point_high = rate_limit_analyzer.compute_change_point(time_series_adjusted.first, cp_type);
+                change_points.insert(std::make_pair(ip_address_high_rate, change_point_high));
+            }
+
+            auto change_point_low = rate_limit_analyzer.compute_change_point(time_series_adjusted.second, cp_type);
+            change_points.insert(std::make_pair(ip_address_i, change_point_low));
         }
     }
 
@@ -257,9 +278,6 @@ std::stringstream rate_limit_group_t::analyse_group_probes(
         auto real_target = probe_info.get_real_target();
         auto loss_rate = rate_limit_analyzer.compute_loss_rate(real_target);
         std::cout << real_target << " loss rate: " << loss_rate << "\n";
-
-        // Changing behaviour time
-        auto change_point = rate_limit_analyzer.compute_icmp_change_point(real_target);
 
         // Transition matrices
         auto transition_matrix = rate_limit_analyzer.compute_loss_model(real_target);
@@ -281,7 +299,7 @@ std::stringstream rate_limit_group_t::analyse_group_probes(
                 real_target,
                 group_type,
                 probing_rate,
-                change_point,
+                change_points[real_target],
                 loss_rate,
                 transition_matrix.transition(0,0),
                 transition_matrix.transition(0,1),
@@ -337,10 +355,10 @@ void rate_limit_group_t::analyse_group_probes(
         else {
             // We are in analyse only phase
             if (options.use_group_for_analyse){
-                auto starting_probing_rate = compute_probing_rate(minimum_probing_rate, group.second, algorithm_context);
+                auto starting_probing_rate = compute_probing_rate(options.starting_probing_rate, group.second, algorithm_context);
                 probing_rate = find_triggering_rate(first_candidate,probes_infos, starting_probing_rate, target_loss_interval, options.pcap_dir_groups, group_type, algorithm_context);
             } else if (options.use_individual_for_analyse){
-                auto triggering_rate = find_triggering_rate(first_candidate,probes_infos, minimum_probing_rate, target_loss_interval, options.pcap_dir_individual, "INDIVIDUAL", algorithm_context);
+                auto triggering_rate = find_triggering_rate(first_candidate,probes_infos, options.starting_probing_rate, target_loss_interval, options.pcap_dir_individual, "INDIVIDUAL", algorithm_context);
                 if (group_type == "GROUPSPR"){
                     probing_rate = compute_probing_rate(triggering_rate, group.second, algorithm_context);
                 } else if (group_type == "GROUPDPR"){
@@ -418,7 +436,7 @@ int rate_limit_group_t::compute_rate_factor_dpr(std::vector<probe_infos_t> &prob
 
 
     first_candidate.set_probing_rate(lcm_rates);
-    for (int i = 1; i < probes_infos.size(); ++i){
+    for (std::size_t i = 1; i < probes_infos.size(); ++i){
 //        std::cout << "Low rate factor for " << probes_infos[i].get_real_target() << ": " << rate_factors[i-1]/gcd_rates << "\n";
         probes_infos[i].set_probing_rate(rate_factors[i-1]/gcd_rates);
     }

@@ -54,6 +54,7 @@ void rate_limit_individual_t::execute_individual_probes(
         algorithm_context_t & algorithm_context){
     auto sniff_interface = NetworkInterface::default_interface();
 
+    std::cout << "Will use interface: " << sniff_interface.name() << "\n";
     /**
      *  Probe each interface until it reaches the target loss rate.
      *  It works as TCP slow start and then linear search.
@@ -117,7 +118,7 @@ void rate_limit_individual_t::execute_individual_probes(
 
         while(binary_search_iteration < maximum_binary_search_iteration) {
 
-            if (probing_rate >= maximum_probing_rate || probing_rate < minimum_probing_rate) {
+            if (probing_rate >= maximum_probing_rate || probing_rate < options.starting_probing_rate) {
                 std::cout << "No triggering probing rate found for the target loss rate interval ["
                           << target_loss_rate_interval.first
                           << ", " << target_loss_rate_interval.second << "] for " << real_target << "\n";
@@ -212,7 +213,7 @@ std::stringstream rate_limit_individual_t::analyse_individual_probes(
     auto loss_rate = rate_limit_analyzer.compute_loss_rate(real_target);
     std::cout << "Loss rate: " << loss_rate << "\n";
     // Now extract relevant infos.
-    auto change_point = rate_limit_analyzer.compute_icmp_change_point(real_target);
+    auto change_point = rate_limit_analyzer.compute_change_point(real_target);
     auto transition_matrix_per_ip = rate_limit_analyzer.compute_loss_model(real_target);
 
     auto line_ostream = build_output_line(
@@ -241,7 +242,7 @@ void rate_limit_individual_t::analyse_individual_probes(const std::vector <probe
 
     if (options.first_only){
         auto first_candidate = probes_infos[0];
-        for (int i = minimum_probing_rate; i < maximum_probing_rate; i *= 2){
+        for (int i = options.starting_probing_rate; i < maximum_probing_rate; i *= 2){
             auto icmp_type = first_candidate.icmp_type_str();
             auto real_target = first_candidate.get_real_target();
             try {
@@ -265,7 +266,7 @@ void rate_limit_individual_t::analyse_individual_probes(const std::vector <probe
             triggering_rate = algorithm_context.get_triggering_rates_by_ips()[probe_infos.get_real_target()];
         }
         else {
-            triggering_rate = find_triggering_rate(probe_infos, probes_infos, minimum_probing_rate, target_loss_rate_interval, options.pcap_dir_individual, "INDIVIDUAL", algorithm_context);
+            triggering_rate = find_triggering_rate(probe_infos, probes_infos, options.starting_probing_rate, target_loss_rate_interval, options.pcap_dir_individual, "INDIVIDUAL", algorithm_context);
             algorithm_context.get_triggering_rates_by_ips()[probe_infos.get_real_target()] = triggering_rate;
         }
 

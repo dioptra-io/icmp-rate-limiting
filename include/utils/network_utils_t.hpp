@@ -36,7 +36,6 @@ namespace utils{
 
 
     static auto maximum_probing_rate = std::pow(2, 16) - 1;
-    static auto minimum_probing_rate = 128;
 
     static auto maximum_binary_search_iteration = 8;
 }

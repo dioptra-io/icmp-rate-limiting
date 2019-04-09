@@ -15,6 +15,14 @@
 #include <utils/container_utils_t.hpp>
 #include <utils/maths_utils_t.hpp>
 
+bool operator == (const RGBApixel & p1, const RGBApixel & p2){
+    return p1.Alpha == p2.Alpha && p1.Blue == p2.Blue && p1.Green==p2.Green && p1.Red==p2.Red;
+}
+
+RGBApixel white {255, 255, 255};
+RGBApixel black {0, 0, 0, 255};
+RGBApixel red   {0, 0, 255, 255};
+
 template<typename IPvAddress>
 class rate_limit_plotter_t {
 public:
@@ -142,9 +150,125 @@ public:
         gp.send1d(responsiveness);
     }
 
+    template<typename Sort>
+    void plot_bitmap_raw_with_changepoint(
+            const std::map<Sort, std::pair<int, std::vector<int>>> &raw_data,  const std::string & title) {
 
+//        auto vector_raw = utils::values(raw_data.second);
+
+        if (raw_data.empty()){
+            return;
+        }
+
+
+        auto full_responsive = *std::max_element(raw_data.begin()->second.second.begin(), raw_data.begin()->second.second.end());
+
+        std::cout << "High rate has "  << full_responsive << " more probes than low rate.\n";
+
+
+        // Plot with 50 shades of grey (lol).
+        // Split the grey space into full_responsive intervals.
+        std::vector<RGBApixel> grey_space;
+        int grey_step = 255 / full_responsive;
+        for (int i = 0; i < 255; i += grey_step){
+            uint8_t  grey_level = static_cast<uint8_t >(i);
+            grey_space.push_back(RGBApixel{grey_level, grey_level, grey_level, 255});
+        }
+
+        std::vector<std::vector<RGBApixel>> pixels_time_series;
+        for (const auto & ts : raw_data){
+            auto cp = ts.second.first;
+            const auto & time_series = ts.second.second;
+            std::vector <RGBApixel> pixels;
+            for (int i = 0; i < time_series.size(); ++i){
+                // Color entire zone for better display
+                if (i == cp){
+                    pixels.emplace_back(black);
+//                }
+//                if (i > cp - 10 && i < cp + 10){
+//                    pixels.emplace_back(black);
+                } else if (time_series[i] == 0){
+                    pixels.emplace_back(white);
+                } else {
+                    pixels.emplace_back(grey_space[grey_space.size() - time_series[i]]);
+                }
+            }
+            pixels_time_series.push_back(pixels);
+        }
+
+        std::vector<RGBApixel> artificial_ts;
+        for (std::size_t i = 0; i < raw_data.begin()->second.second.size(); ++i){
+            artificial_ts.emplace_back(white);
+        }
+
+        std::vector<std::vector<RGBApixel>> final_pixels_time_series;
+
+        for (std::size_t i = 0; i < pixels_time_series.size(); ++i){
+            if (i != 0 && i % 2 == 0){
+                final_pixels_time_series.push_back(artificial_ts);
+            }
+            final_pixels_time_series.push_back(pixels_time_series[i]);
+
+
+        }
+
+        plot_bitmap_internal(final_pixels_time_series, title);
+    }
+
+    template<typename Sort>
+    void plot_bitmap_raw_with_changepoint(
+            const std::map<Sort, std::pair<int, std::vector<utils::responsive_info_probe_t>>> &raw_data,  const std::string & title) {
+
+//        auto vector_raw = utils::values(raw_data.second);
+
+        if (raw_data.empty()){
+            return;
+        }
+
+
+        std::vector<std::vector<RGBApixel>> pixels_time_series;
+        for (const auto & ts : raw_data){
+            auto cp = ts.second.first;
+            const auto & time_series = ts.second.second;
+            std::vector <RGBApixel> pixels;
+            for (int i = 0; i < time_series.size(); ++i){
+                // Color entire zone for better display
+                if (i > cp - 10 && i < cp + 10){
+                    pixels.emplace_back(red);
+                } else if (time_series[i].first){
+                    pixels.emplace_back(black);
+                } else {
+                    pixels.emplace_back(white);
+                }
+            }
+            pixels_time_series.push_back(pixels);
+        }
+
+        std::vector<RGBApixel> artificial_ts;
+        for (std::size_t i = 0; i < raw_data.begin()->second.second.size(); ++i){
+            artificial_ts.emplace_back(white);
+        }
+
+        std::vector<std::vector<RGBApixel>> final_pixels_time_series;
+
+        for (std::size_t i = 0; i < pixels_time_series.size(); ++i){
+            if (i != 0){
+                final_pixels_time_series.push_back(artificial_ts);
+                final_pixels_time_series.push_back(artificial_ts);
+//                final_pixels_time_series.push_back(artificial_ts);
+            }
+            final_pixels_time_series.push_back(pixels_time_series[i]);
+
+
+        }
+
+
+        plot_bitmap_internal(final_pixels_time_series, title);
+    }
+
+    template<typename Sort>
     void plot_bitmap_raw(
-            const std::unordered_map<IPvAddress, std::vector<utils::responsive_info_probe_t>> &raw_data, const std::string & title) {
+            const std::map<Sort, std::vector<utils::responsive_info_probe_t>> &raw_data, const std::string & title) {
 
         auto vector_raw = utils::values(raw_data);
 
@@ -358,6 +482,52 @@ public:
         return cor;
     }
 
+    /**
+     * Use this function to use custom pixel color (useful for change point detection for example
+     * @param v
+     * @param color
+     * @return
+     */
+    std::vector<std::pair<utils::responsive_info_probe_t, RGBApixel>> add_color(const std::vector<utils::responsive_info_probe_t> & v,
+                                                                                const std::vector<RGBApixel> & color) const {
+
+
+        std::vector<std::pair<utils::responsive_info_probe_t, RGBApixel>> v_color;
+
+        v_color.reserve(v.size());
+        for (int i = 0; i < v.size(); ++i){
+            v_color.emplace_back(v[i], color[i]);
+        }
+
+        return v_color;
+    }
+    /**
+     * Use this function to put unique color.
+     * @param v
+     * @param color
+     * @return
+     */
+    std::vector<std::pair<utils::responsive_info_probe_t, RGBApixel>> add_color(const std::vector<utils::responsive_info_probe_t> & v,
+                                                                                const RGBApixel & color) const {
+
+
+        std::vector<std::pair<utils::responsive_info_probe_t, RGBApixel>> v_color;
+
+        v_color.reserve(v.size());
+        for (const auto & responsive_info_probe : v){
+            v_color.emplace_back(responsive_info_probe, color);
+        }
+
+        return v_color;
+    }
+
+
+    /**
+     * Internal functions
+     *
+     *
+     *
+     */
     private:
     void plot_bitmap_internal(
             const std::vector<std::vector<utils::responsive_info_probe_t>> &raw_data,
@@ -366,30 +536,35 @@ public:
         plot_bitmap_internal(add_color(raw_data, black), title);
 
     }
+
+
+
     void
-    plot_bitmap_internal(const std::vector<std::pair<RGBApixel, std::vector<utils::responsive_info_probe_t>>> &raw_data,
+    plot_bitmap_internal(const std::vector<std::vector<RGBApixel>> &raw_data,
                                                const std::string &title) {
 
 
         // Find the maximum width
 
         auto it = std::max_element(raw_data.begin(), raw_data.end(), [](const auto & raw_data1, const auto & raw_data2){
-            return raw_data1.second.size() < raw_data2.second.size();
+            return raw_data1.size() < raw_data2.size();
         });
 
         int offset = 0;
 
-        std::size_t width_resolution = static_cast<std::size_t >(it->second.size() + offset);
+        std::size_t width_resolution = static_cast<std::size_t >(it->size() + offset) / 4;
 
-        std::size_t height_resolution = static_cast<std::size_t>(3.0/4 * width_resolution);
+//        std::size_t height_resolution = static_cast<std::size_t>(3.0/4 * width_resolution);
+
+        std::size_t height_resolution = 40 * raw_data.size();
 
         std::size_t limit_height = 4 * raw_data.size();
 
         if (height_resolution < limit_height) {
             height_resolution = limit_height;
         }
-        std::size_t interval_between_line = height_resolution / raw_data.size();
-
+//        std::size_t interval_between_line = height_resolution / raw_data.size();
+        std::size_t interval_between_line = 40;
 
         BMP image;
         image.SetSize(width_resolution, height_resolution);
@@ -404,12 +579,12 @@ public:
 
         // Loop on every two pixel lines.
         for (int i = 0; i < raw_data.size(); ++i){
-            for(int j = 0; j < raw_data[i].second.size(); ++j){
+
+            for(int j = 0; j < raw_data[i].size()/4; ++j){
 //            image.SetPixel(j, i, white);
-                if (raw_data[i].second[j].first){
-                    for (int k = 0; k < interval_between_line/2; ++k){
-                        image.SetPixel( j, interval_between_line*i + k, raw_data[i].first);
-                    }
+
+                for (int k = 0; k < interval_between_line/2; ++k){
+                    image.SetPixel( j, interval_between_line*i + k, raw_data[i][j]);
                 }
             }
         }
@@ -475,24 +650,6 @@ public:
 
         return correlations_matrix;
     }
-
-
-    std::vector<std::pair<RGBApixel, std::vector<utils::responsive_info_probe_t>>> add_color(const std::vector<std::vector<utils::responsive_info_probe_t>> & sorted_vector,
-                                                                                      const RGBApixel & color) const {
-        std::vector<std::pair<RGBApixel, std::vector<utils::responsive_info_probe_t>>> raw_data_color;
-
-        for (const auto & raw: sorted_vector){
-            raw_data_color.push_back(std::make_pair(color, raw));
-        }
-
-        return raw_data_color;
-    }
-
-    RGBApixel white {255, 255, 255};
-    RGBApixel black {0, 0, 0, 255};
-    RGBApixel red   {0, 0, 255, 255};
-    // Add the colors
-
 };
 
 

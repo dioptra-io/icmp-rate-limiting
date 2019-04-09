@@ -22,6 +22,7 @@ public:
     std::unordered_map<std::string, std::map<int, double>> & get_loss_rates_by_ips();
 
     std::unordered_map<std::string, int> & get_triggering_rates_by_ips();
+    void set_triggering_rates_by_ips(const std::unordered_map<std::string, int> &triggering_rates_by_ips);
 
     bool is_triggering_rate_already_found() const;
 
@@ -40,7 +41,6 @@ private:
     std::unordered_map<std::string, std::map<int, double>> loss_rates_by_ips;
     std::unordered_map<std::string, int> triggering_rates_by_ips;
     std::stringstream ostream;
-
 };
 
 

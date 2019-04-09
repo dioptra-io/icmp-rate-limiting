@@ -319,9 +319,15 @@ void rate_limit_analyzer_t::start(const std::string &pcap_file)  {
 
 
 
-            if (icmp->type() == ICMP::Flags::ECHO_REQUEST){
+            if (icmp!= nullptr && icmp->type() == ICMP::Flags::ECHO_REQUEST){
                 outgoing_packets.push_back(packet);
             } else {
+                auto id_seq_key = std::make_pair(icmp->id(), icmp->sequence());
+                if (match_icmp_replies.find(id_seq_key) == match_icmp_replies.end()){
+                    match_icmp_replies[id_seq_key] = std::vector<Packet>();
+
+                }
+                match_icmp_replies[id_seq_key].push_back(packet);
                 icmp_replies.push_back(packet);
             }
         }
@@ -352,9 +358,9 @@ void rate_limit_analyzer_t::start(const std::string &pcap_file)  {
                 }
             }
 
-            if (icmpv6->type() == ICMPv6::Types ::ECHO_REQUEST){
+            if (icmpv6 != nullptr && icmpv6->type() == ICMPv6::Types ::ECHO_REQUEST){
                 outgoing_packets.push_back(packet);
-            } else if (icmpv6->type() == ICMPv6::Types ::ECHO_REPLY) {
+            } else if (icmpv6 != nullptr && icmpv6->type() == ICMPv6::Types ::ECHO_REPLY) {
                 auto id_seq_key = std::make_pair(icmpv6->identifier(), icmpv6->sequence());
                 if (match_icmp_replies.find(id_seq_key) == match_icmp_replies.end()){
                     match_icmp_replies[id_seq_key] = std::vector<Packet>();
@@ -372,8 +378,12 @@ void rate_limit_analyzer_t::start(const std::string &pcap_file)  {
     Tins::FileSniffer sniffer(pcap_file);
     sniffer.sniff_loop(build_series);
 
-
-
+    std::cout << "Read " << outgoing_packets.size() << " ICMP(v6) packets outgoing\n";
+    auto n_replies = 0;
+    for (const auto & replies : match_icmp_replies){
+        n_replies += replies.second.size();
+    }
+    std::cout << "Read " << n_replies << " ICMP(v6) packets replies\n";
     // initialize packets to empty list
     for (const auto & matcher : matchers4){
         packets_per_interface.insert(std::make_pair(matcher.first.to_string(), std::vector<responsive_info_probe_t>()));
@@ -383,11 +393,6 @@ void rate_limit_analyzer_t::start(const std::string &pcap_file)  {
     }
     // Matches probe with replies and extract responsiveness
     sort_by_timestamp(outgoing_packets);
-    // Remove the last packet that had been sent to shut the sniffer.
-
-    if (!outgoing_packets.empty()){
-        outgoing_packets.erase(outgoing_packets.end()-1);
-    }
 
     for (const auto & packet: outgoing_packets){
         auto outgoing_pdu = packet.pdu();
@@ -397,6 +402,15 @@ void rate_limit_analyzer_t::start(const std::string &pcap_file)  {
         if (ip != nullptr){
             auto icmp = ip->find_pdu<ICMP>();
             auto id_seq_key = std::make_pair(icmp->id(), icmp->sequence());
+
+
+            //DEBUG
+//            if (pcap_file.find("DPR") != std::string::npos) {
+//                std::cout << id_seq_key.first << ","<< id_seq_key.second << "," << packet.timestamp().microseconds() << "\n";
+//            }
+
+
+
             auto it = match_icmp_replies.find(id_seq_key);
             if (it != match_icmp_replies.end()) {
                 auto & icmp_replies = it->second;
@@ -421,7 +435,7 @@ void rate_limit_analyzer_t::start(const std::string &pcap_file)  {
             }
             else if (it == match_icmp_replies.end()) {
                 if (icmp->type() == ICMP::Flags::ECHO_REQUEST){
-                    IPv6Address dst_ip;
+                    IPv4Address dst_ip;
                     if (probing_style == probing_style_t::DIRECT){
                         // Match the ip probe with the destination in case of direct probing
                         dst_ip = ip->dst_addr();
@@ -875,27 +889,28 @@ gilbert_elliot_t rate_limit_analyzer_t::compute_loss_model(const std::string &ad
     return compute_loss_model(packets_per_interface.at(address));
 }
 
-int rate_limit_analyzer_t::compute_icmp_change_point(
-        const std::vector<responsive_info_probe_t> &data) const {
-
-    // Early return if data is empty
-    if (data.empty()){
-        return static_cast<int>(data.size());
-    }
-
+int rate_limit_analyzer_t::compute_change_point(const std::vector<int> &data, change_point_type_t cpt_type) const {
     // Create the R context
     if (!already_loaded){
         R_context.parseEvalQ(load_R_libraries);
         already_loaded = true;
     }
+    R_context["data"] = data;
 
+    std::string cpt_type_str;
+    if (cpt_type == change_point_type_t::MEAN){
+        cpt_type_str = "var";
+    } else if (cpt_type == change_point_type_t::VAR){
+        cpt_type_str = "var";
+    }
 
-    // Change to binary responses
-    auto binary_responses = responsiveness_to_binary(data);
+    std::stringstream r_command;
+    r_command << "data.man=cpt.";
+    r_command << cpt_type_str;
+    r_command << "(data, method='AMOC',penalty='Asymptotic', pen.value=0.05)";
 
-    R_context["data"] = binary_responses;
-
-    auto run_change_point_algorithm = std::string("data.man=cpt.meanvar(data, method='PELT',penalty='Manual', pen.value='5 * log(n)')");
+    auto run_change_point_algorithm = r_command.str();
+    //Manual penalty, less good. pen.value='50 * log(n)')");
 
     R_context.parseEvalQ(run_change_point_algorithm);
 
@@ -908,6 +923,24 @@ int rate_limit_analyzer_t::compute_icmp_change_point(
     }
 
     return change_point;
+}
+
+int rate_limit_analyzer_t::compute_change_point(
+        const std::vector<responsive_info_probe_t> &data, change_point_type_t cp_type) const {
+
+    // Early return if data is empty
+    if (data.empty()){
+        return static_cast<int>(data.size());
+    }
+
+
+    // Change to binary responses
+    auto binary_responses = responsiveness_to_binary(data);
+
+
+    auto change_point = compute_change_point(binary_responses, cp_type);
+
+    return change_point;
 
 }
 
@@ -915,16 +948,16 @@ std::unordered_map<std::string, int>
 rate_limit_analyzer_t::compute_icmp_change_point() const {
     std::unordered_map<std::string, int> icmp_change_point;
     for (const auto & responsiveness_ip : packets_per_interface){
-        auto change_point = compute_icmp_change_point(responsiveness_ip.second);
+        auto change_point = compute_change_point(responsiveness_ip.second, change_point_type_t::MEAN);
         icmp_change_point[responsiveness_ip.first] = change_point;
     }
     return icmp_change_point;
 }
 
 int
-rate_limit_analyzer_t::compute_icmp_change_point(const std::string &ip_address) const {
+rate_limit_analyzer_t::compute_change_point(const std::string &ip_address) const {
     auto raw = packets_per_interface.at(ip_address);
-    auto change_point = compute_icmp_change_point(raw);
+    auto change_point = compute_change_point(raw, change_point_type_t::MEAN);
     return change_point;
 }
 
@@ -1000,16 +1033,8 @@ double rate_limit_analyzer_t::correlation(const std::string &ip_address1,
     return correlation(packets_per_interface[ip_address1], packets_per_interface[ip_address2]);
 }
 
-double rate_limit_analyzer_t::correlation_high_low(const std::string &high_rate_ip_address,
-                                                    const std::string &low_rate_ip_address) {
-
-
-    /**
-     * Adjust the number of bits, then compute the correlation.
-     */
-
-    // Adjust number of bits
-
+std::pair<std::vector<int>, std::vector<int>>
+rate_limit_analyzer_t::adjust_time_series_length(const std::string &high_rate_ip_address, const std::string &low_rate_ip_address) {
     auto & packets_high_rate_interface = packets_per_interface[high_rate_ip_address];
     auto & packets_low_rate_interface  = packets_per_interface[low_rate_ip_address];
 
@@ -1021,24 +1046,24 @@ double rate_limit_analyzer_t::correlation_high_low(const std::string &high_rate_
 
     // Transform low rate time series to replace 1's by n_bits
     std::transform(packets_low_rate_interface.begin(), packets_low_rate_interface.end(), std::back_inserter(int_bits_low),
-    [n_bits](const auto & responsiveness_packet){
-        if (responsiveness_packet.first){
-            return n_bits;
-        }
-        return 0;
-    });
+                   [n_bits](const auto & responsiveness_packet){
+                       if (responsiveness_packet.first){
+                           return n_bits;
+                       }
+                       return 0;
+                   });
 
     std::transform(packets_high_rate_interface.begin(), packets_high_rate_interface.end(), std::back_inserter(int_bits_high),
-    [](const auto & responsiveness_packet){
-        if (responsiveness_packet.first){
-            return 1;
-        }
-        return 0;
-    });
+                   [](const auto & responsiveness_packet){
+                       if (responsiveness_packet.first){
+                           return 1;
+                       }
+                       return 0;
+                   });
 
     std::vector<int> subsequences_high_rate;
 
-    for (int i = 0; i + n_bits < int_bits_high.size(); i += n_bits){
+    for (std::size_t i = 0; i + n_bits < int_bits_high.size(); i += n_bits){
         // Build subsequences of n_bits
         auto sum_bits = std::accumulate(int_bits_high.begin() + i, int_bits_high.begin() + i + n_bits, 0);
         subsequences_high_rate.push_back(sum_bits);
@@ -1049,6 +1074,23 @@ double rate_limit_analyzer_t::correlation_high_low(const std::string &high_rate_
     subsequences_high_rate.resize(min_size);
     int_bits_low.resize(min_size);
 
+
+    return std::make_pair(subsequences_high_rate, int_bits_low);
+}
+
+double rate_limit_analyzer_t::correlation_high_low(const std::string &high_rate_ip_address,
+                                                    const std::string &low_rate_ip_address) {
+
+
+    /**
+     * Adjust the number of bits, then compute the correlation.
+     */
+
+    // Adjust number of bits
+
+    const auto equal_length_time_series = adjust_time_series_length(high_rate_ip_address, low_rate_ip_address);
+    const auto & subsequences_high_rate = equal_length_time_series.first;
+    const auto & int_bits_low = equal_length_time_series.second;
     // Compute correlation
     auto correlation = cov_correlation(subsequences_high_rate, int_bits_low).second;
 
@@ -1103,6 +1145,10 @@ rate_limit_analyzer_t rate_limit_analyzer_t::build_rate_limit_analyzer_t_from_pr
     rate_limit_analyzer = rate_limit_analyzer_t(probes_infos[0].get_probing_style(), matchers4, matchers6);
     return rate_limit_analyzer;
 }
+
+
+
+
 
 
 

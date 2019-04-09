@@ -30,8 +30,6 @@ namespace {
 
 
     auto target_loss_rate_interval = std::pair<double, double> {0.10, 0.15};
-    auto starting_probing_rate = minimum_probing_rate;
-    std::vector<int> custom_rates{1000};
 
 }
 
@@ -89,8 +87,10 @@ int main(int argc, char * argv[]){
             ("use-group,U", "use group for group analyse triggering rate")
             ("probe-only,p", "do not analyse, only probe")
             ("custom-probing-rates,c", "Use custom probing rates")
+            ("start-probing-rate",po::value<int>(), "Starting probing rate")
             ("measurement-time,m", po::value<int>(), "Set the measurement time(and so size of sampling")
-            ("low-rate-dpr,r", po::value<int>(), "Set the measurement low rate for different probing rate phase");
+            ("low-rate-dpr,r", po::value<int>(), "Set the measurement low rate for different probing rate phase")
+            ("individual-result-file", po::value<std::string>(), "Set the individual input file to avoid re reading pcap files");
 
     po::variables_map vm;
     po::store(po::parse_command_line(argc, argv, desc), vm);
@@ -195,11 +195,17 @@ int main(int argc, char * argv[]){
         options.is_custom_probing_rates = true;
 
         // No parameter atm
-        for (int i = 1000; i <= 4000; i += 250 ){
-            options.custom_probing_rates.push_back(i);
-        }
+//        for (int i = 128000; i <= 4000; i += 250 ){
+//            options.custom_probing_rates.push_back(i);
+//        }
+        options.custom_probing_rates.push_back(50000);
         std::cout << "Custom probing rates will be used.\n";
     }
+    if (vm.count("start-probing-rate")){
+        options.starting_probing_rate = vm["start-probing-rate"].as<int>();
+        std::cout << "Start probing rate set to " << options.starting_probing_rate << " probes per seconds\n";
+    }
+
     if (vm.count("measurement-time")){
         options.measurement_time = vm["measurement-time"].as<int>();
         std::cout << "Measurement time set to " << options.measurement_time << " seconds\n";
@@ -209,15 +215,14 @@ int main(int argc, char * argv[]){
         std::cout << "Low rate dpr set to " << options.low_rate_dpr<< " packets per seconds\n";
     }
 
+    if (vm.count("individual-result-file")){
+        options.individual_result_file = vm["individual-result-file"].as<std::string>();
+        std::cout << "Individual result file set to " << options.individual_result_file << "\n";
+    }
 
+    std::cout << "Reading input file...\n";
     auto probes_infos = parse_input_file(targets_file_path.c_str());
-
-
-    /**
-     * Initialize default values
-     */
-
-    auto max_probing_rate = 10000;
+    std::cout << "Finished to read input file...\n";
 
 
     /**
@@ -237,19 +242,24 @@ int main(int argc, char * argv[]){
      * Intialize algorithm context
      */
     algorithm_context_t algorithm_context(probes_infos);
-
+    if (!options.individual_result_file.empty()){
+        std::cout << "Parsing individual results file...\n";
+        algorithm_context.set_triggering_rates_by_ips(parse_individual_result_file(options.individual_result_file,
+                target_loss_rate_interval));
+        algorithm_context.set_triggering_rate_already_found(true);
+        std::cout << "Finished parsing individual results file...\n";
+    }
 
 
     // Individual probing
     rate_limit_individual_t rate_limit_individual;
-    rate_limit_group_t rate_limit_group;
     rate_limit_group_t rate_limit_group_dpr;
     if (!options.analyse_only){
 
         if (!options.group_only){
             std::cout << "Proceeding to probing individual phase with progressive probing rate\n";
             rate_limit_individual.execute_individual_probes(probes_infos,
-                    starting_probing_rate,
+                    options.starting_probing_rate,
                                                                                target_loss_rate_interval,
                                                                                options,
                                                                                algorithm_context);
@@ -260,13 +270,13 @@ int main(int argc, char * argv[]){
 
         if (!options.individual_only){
             // Group probing same rate
-            std::cout << "Proceeding to probing groups phase with same probing rate\n";
-            rate_limit_group.execute_group_probes(probes_infos,
-                                                   target_loss_rate_interval,
-                                                   "GROUPSPR",
-                                                   options,
-                                                   algorithm_context);
-            std::this_thread::sleep_for(std::chrono::seconds(options.measurement_time + 1));
+//            std::cout << "Proceeding to probing groups phase with same probing rate\n";
+//            rate_limit_group.execute_group_probes(probes_infos,
+//                                                   target_loss_rate_interval,
+//                                                   "GROUPSPR",
+//                                                   options,
+//                                                   algorithm_context);
+//            std::this_thread::sleep_for(std::chrono::seconds(options.measurement_time + 1));
             std::cout << "Proceeding to probing groups phase with different probing rate\n";
             rate_limit_group_dpr.execute_group_probes(probes_infos,
                                                        target_loss_rate_interval,
@@ -287,12 +297,12 @@ int main(int argc, char * argv[]){
             algorithm_context.set_triggering_rate_already_found(true);
         }
         if (!options.individual_only){
-            rate_limit_group.analyse_group_probes(probes_infos,
-                                                   target_loss_rate_interval,
-                                                   "GROUPSPR",
-                                                   options,
-                                                   algorithm_context);
-            algorithm_context.set_triggering_rate_already_found(true);
+//            rate_limit_group.analyse_group_probes(probes_infos,
+//                                                   target_loss_rate_interval,
+//                                                   "GROUPSPR",
+//                                                   options,
+//                                                   algorithm_context);
+//            algorithm_context.set_triggering_rate_already_found(true);
             rate_limit_group_dpr.analyse_group_probes(probes_infos,
                                                        target_loss_rate_interval,
                                                        "GROUPDPR",

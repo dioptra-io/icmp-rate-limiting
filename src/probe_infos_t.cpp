@@ -108,7 +108,7 @@ std::string to_file_name (const std::vector<probe_infos_t> & alias_test, char se
     // To avoid to reach the limit of file_name, cut the file_name to 2 candidates and 1 witness, even if there are more than
     // 2 candidates
     auto candidates = 0;
-    for (int i = 0; i < alias_test.size(); ++i){
+    for (std::size_t i = 0; i < alias_test.size(); ++i){
 
         if (i != 0){
             ss << separator;
@@ -128,7 +128,7 @@ std::string to_file_name (const std::vector<probe_infos_t> & alias_test, char se
         }
     }
 
-    for (int i = 0; i < alias_test.size(); ++i){
+    for (std::size_t i = 0; i < alias_test.size(); ++i){
         if (alias_test[i].get_interface_type() == interface_type_t::WITNESS){
             ss << separator;
             if (alias_test[i].get_family() == PDU::PDUType::IP){

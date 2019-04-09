@@ -118,7 +118,7 @@ namespace utils{
         std::map<int, double> & loss_rate_by_probing_rate = algorithm_context.get_loss_rates_by_ips()[real_target];
         std::unordered_map<std::string, int> & triggering_rates =  algorithm_context.get_triggering_rates_by_ips();
         while (binary_search_iteration < maximum_binary_search_iteration) {
-            if (probing_rate >= maximum_probing_rate || probing_rate < minimum_probing_rate) {
+            if (probing_rate >= maximum_probing_rate || probing_rate < starting_probing_rate) {
                 std::cout << "No triggering probing rate found for the target loss rate interval ["
                           << target_loss_rate_interval.first
                           << ", " << target_loss_rate_interval.second << "] for " << real_target << "\n";
