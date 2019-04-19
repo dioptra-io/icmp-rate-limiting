@@ -33,6 +33,7 @@ namespace utils{
         int low_rate_dpr = 10;
         std::string individual_result_file = "";
         int starting_probing_rate = 128;
+        double exponential_reason = 1.05;
 
     };
 

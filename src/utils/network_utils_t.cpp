@@ -19,7 +19,8 @@ namespace utils{
                                   std::unordered_map<std::string, int> & triggering_rates,
                                   const std::pair<double, double> & target_loss_rate_interval,
                                   bool & is_binary_search,
-                                  int & binary_search_iteration
+                                  int & binary_search_iteration,
+                                  double exponential_reason
                                   ){
         auto lower_bound_loss_rate = target_loss_rate_interval.first;
         auto upper_bound_loss_rate = target_loss_rate_interval.second;
@@ -52,7 +53,7 @@ namespace utils{
                 probing_rate += (closest_upper_rate - probing_rate) / 2;
             } else {
                 // RL "slow start"
-                probing_rate *= 2;
+                probing_rate *= exponential_reason;
             }
         } else if (loss_rate > upper_bound_loss_rate) {
             if (!is_binary_search) {
@@ -105,6 +106,7 @@ namespace utils{
                               const std::pair<double, double> & target_loss_rate_interval,
                               const std::string & output_dir,
                               const std::string & probing_type,
+                              double exponential_reason,
                               algorithm_context_t & algorithm_context){
 
 
@@ -164,7 +166,8 @@ namespace utils{
                                                                 triggering_rates,
                                                                 target_loss_rate_interval,
                                                                 is_binary_search,
-                                                                binary_search_iteration);
+                                                                binary_search_iteration,
+                                                                exponential_reason);
 
             if (!continue_analyzing) {
                 break;

@@ -92,7 +92,7 @@ void rate_limit_group_t::execute_group_probes(const std::vector<probe_infos_t> &
             if (options.use_individual_for_analyse){
 
                 probing_rate = find_triggering_rate(group[0], group, options.starting_probing_rate, target_loss_rate_interval,
-                        options.pcap_dir_individual, "INDIVIDUAL", algorithm_context);
+                        options.pcap_dir_individual, "INDIVIDUAL", options.exponential_reason, algorithm_context);
                 algorithm_context.set_triggering_rate_already_found(true);
 
                 probing_rate = compute_probing_rate(probing_rate, group, algorithm_context);
@@ -174,7 +174,8 @@ void rate_limit_group_t::execute_group_probes(const std::vector<probe_infos_t> &
                                                                   triggering_rates,
                                                                   target_loss_rate_interval,
                                                                   is_binary_search,
-                                                                  binary_search_iteration);
+                                                                  binary_search_iteration,
+                                                                  options.exponential_reason);
 
                 if (!continue_probing){
                     break;
@@ -356,9 +357,9 @@ void rate_limit_group_t::analyse_group_probes(
             // We are in analyse only phase
             if (options.use_group_for_analyse){
                 auto starting_probing_rate = compute_probing_rate(options.starting_probing_rate, group.second, algorithm_context);
-                probing_rate = find_triggering_rate(first_candidate,probes_infos, starting_probing_rate, target_loss_interval, options.pcap_dir_groups, group_type, algorithm_context);
+                probing_rate = find_triggering_rate(first_candidate,probes_infos, starting_probing_rate, target_loss_interval, options.pcap_dir_groups, group_type, options.exponential_reason, algorithm_context);
             } else if (options.use_individual_for_analyse){
-                auto triggering_rate = find_triggering_rate(first_candidate,probes_infos, options.starting_probing_rate, target_loss_interval, options.pcap_dir_individual, "INDIVIDUAL", algorithm_context);
+                auto triggering_rate = find_triggering_rate(first_candidate,probes_infos, options.starting_probing_rate, target_loss_interval, options.pcap_dir_individual, "INDIVIDUAL", options.exponential_reason, algorithm_context);
                 if (group_type == "GROUPSPR"){
                     probing_rate = compute_probing_rate(triggering_rate, group.second, algorithm_context);
                 } else if (group_type == "GROUPDPR"){

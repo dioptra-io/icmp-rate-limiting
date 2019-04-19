@@ -19,7 +19,8 @@ namespace utils{
                                    std::unordered_map<std::string, int> & triggering_rates,
                                    const std::pair<double, double> & target_loss_rate_interval,
                                    bool & is_binary_search,
-                                   int & binary_search_iteration
+                                   int & binary_search_iteration,
+                                   double exponential_reason
     );
 
     int find_triggering_rate(const probe_infos_t & probe_infos,
@@ -28,6 +29,7 @@ namespace utils{
                               const std::pair<double, double> & target_loss_rate_interval,
                               const std::string & output_dir,
                               const std::string & probing_type,
+                              double exponential_reason,
                               algorithm_context_t & algorithm_context);
 
     int find_closest_rate(const probe_infos_t & first_candidate_probe_infos,

@@ -146,7 +146,8 @@ void rate_limit_individual_t::execute_individual_probes(
                                                               triggering_rates,
                                                               target_loss_rate_interval,
                                                               is_binary_search,
-                                                              binary_search_iteration);
+                                                              binary_search_iteration,
+                                                              options.exponential_reason);
 
             if (!continue_probing){
                 std::this_thread::sleep_for(std::chrono::seconds(options.measurement_time + 1));
@@ -266,7 +267,7 @@ void rate_limit_individual_t::analyse_individual_probes(const std::vector <probe
             triggering_rate = algorithm_context.get_triggering_rates_by_ips()[probe_infos.get_real_target()];
         }
         else {
-            triggering_rate = find_triggering_rate(probe_infos, probes_infos, options.starting_probing_rate, target_loss_rate_interval, options.pcap_dir_individual, "INDIVIDUAL", algorithm_context);
+            triggering_rate = find_triggering_rate(probe_infos, probes_infos, options.starting_probing_rate, target_loss_rate_interval, options.pcap_dir_individual, "INDIVIDUAL", options.exponential_reason, algorithm_context);
             algorithm_context.get_triggering_rates_by_ips()[probe_infos.get_real_target()] = triggering_rate;
         }
 

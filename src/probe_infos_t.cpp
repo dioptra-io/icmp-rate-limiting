@@ -128,17 +128,17 @@ std::string to_file_name (const std::vector<probe_infos_t> & alias_test, char se
         }
     }
 
-    for (std::size_t i = 0; i < alias_test.size(); ++i){
-        if (alias_test[i].get_interface_type() == interface_type_t::WITNESS){
-            ss << separator;
-            if (alias_test[i].get_family() == PDU::PDUType::IP){
-                ss << alias_test[i].get_real_target4();
-            } else if (alias_test[i].get_family() == PDU::PDUType::IPv6){
-                ss << alias_test[i].get_real_target6();
-            }
-            break;
-        }
-    }
+//    for (std::size_t i = 0; i < alias_test.size(); ++i){
+//        if (alias_test[i].get_interface_type() == interface_type_t::WITNESS){
+//            ss << separator;
+//            if (alias_test[i].get_family() == PDU::PDUType::IP){
+//                ss << alias_test[i].get_real_target4();
+//            } else if (alias_test[i].get_family() == PDU::PDUType::IPv6){
+//                ss << alias_test[i].get_real_target6();
+//            }
+//            break;
+//        }
+//    }
 
 
     return ss.str();
