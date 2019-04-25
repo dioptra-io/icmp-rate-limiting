@@ -90,7 +90,9 @@ int main(int argc, char * argv[]){
             ("start-probing-rate",po::value<int>(), "Starting probing rate")
             ("measurement-time,m", po::value<int>(), "Set the measurement time(and so size of sampling")
             ("low-rate-dpr,r", po::value<int>(), "Set the measurement low rate for different probing rate phase")
-            ("individual-result-file", po::value<std::string>(), "Set the individual input file to avoid re reading pcap files");
+            ("individual-result-file", po::value<std::string>(), "Set the individual input file to avoid re reading pcap files")
+            ("exponential-rate,e", po::value<double>(), "Set the exponential rate to multiply the probing rate to find rate limiting");
+
 
     po::variables_map vm;
     po::store(po::parse_command_line(argc, argv, desc), vm);
@@ -218,6 +220,11 @@ int main(int argc, char * argv[]){
     if (vm.count("individual-result-file")){
         options.individual_result_file = vm["individual-result-file"].as<std::string>();
         std::cout << "Individual result file set to " << options.individual_result_file << "\n";
+    }
+
+    if (vm.count("exponential-rate")){
+        options.exponential_reason = vm["exponential-rate"].as<double>();
+        std::cout << "Exponential rate set to  " << options.exponential_reason<< " packets per seconds\n";
     }
 
     std::cout << "Reading input file...\n";
