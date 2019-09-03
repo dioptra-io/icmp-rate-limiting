@@ -180,6 +180,12 @@ public:
             auto cp = ts.second.first;
             const auto & time_series = ts.second.second;
             std::vector <RGBApixel> pixels;
+
+//            for (int i = 0; i <time_series.size(); ++i) {
+//                // Color entire zone for better display
+//                pixels.emplace_back(black);
+//
+//            }
             for (int i = 0; i < time_series.size(); ++i){
                 // Color entire zone for better display
                 if (i == cp){
@@ -190,7 +196,7 @@ public:
                 } else if (time_series[i] == 0){
                     pixels.emplace_back(white);
                 } else {
-                    pixels.emplace_back(grey_space[grey_space.size() - time_series[i]]);
+                    pixels.emplace_back(grey_space[grey_space.size() - time_series[i] - 1]);
                 }
             }
             pixels_time_series.push_back(pixels);
@@ -231,11 +237,16 @@ public:
             auto cp = ts.second.first;
             const auto & time_series = ts.second.second;
             std::vector <RGBApixel> pixels;
+
+            for (int i = 0; i < time_series.size() / 4; ++i){
+                pixels.emplace_back(black);
+            }
+
             for (int i = 0; i < time_series.size(); ++i){
-                // Color entire zone for better display
-                if (i > cp - 10 && i < cp + 10){
-                    pixels.emplace_back(red);
-                } else if (time_series[i].first){
+//                // Color entire zone for better display
+//                if (i > cp - 10 && i < cp + 10){
+//                    pixels.emplace_back(red);
+                if (time_series[i].first){
                     pixels.emplace_back(black);
                 } else {
                     pixels.emplace_back(white);
@@ -552,7 +563,7 @@ public:
 
         int offset = 0;
 
-        std::size_t width_resolution = static_cast<std::size_t >(it->size() + offset) / 4;
+        std::size_t width_resolution = static_cast<std::size_t >(it->size() + offset);
 
 //        std::size_t height_resolution = static_cast<std::size_t>(3.0/4 * width_resolution);
 
@@ -580,7 +591,7 @@ public:
         // Loop on every two pixel lines.
         for (int i = 0; i < raw_data.size(); ++i){
 
-            for(int j = 0; j < raw_data[i].size()/4; ++j){
+            for(int j = 0; j < raw_data[i].size(); ++j){
 //            image.SetPixel(j, i, white);
 
                 for (int k = 0; k < interval_between_line/2; ++k){

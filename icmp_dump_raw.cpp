@@ -87,6 +87,10 @@ int main (int argc, char **argv){
                 std::cout << low_rate_candidate << ": " << low_rate_transition_1_1 << "\n";
 
                 std::cout << "Correlation: " << correlation << "\n";
+                if (correlation < 0){
+                    std::cout << high_rate_candidate << ", " << low_rate_candidate << "\n";
+                    std::cout << "wow" << "\n";
+                }
                 t11_cp.insert(std::make_pair(correlation, cp_high));
 //                t11_cp.insert(std::make_pair(low_rate_transition_1_1, cp_low));
 
@@ -100,8 +104,8 @@ int main (int argc, char **argv){
     }
     rate_limit_plotter_t<IPv4Address> plotter;
 
-    plotter.plot_bitmap_raw_with_changepoint(raw_time_series_by_ip, "/Users/kevinvermeulen/Documents/Papers/CCR/ccr-template/figures/test_cp.bmp");
-    plotter.plot_bitmap_raw_with_changepoint(raw_time_series_by_ip_individual, "/Users/kevinvermeulen/Documents/Papers/CCR/ccr-template/figures/test_cp_individual.bmp");
+    plotter.plot_bitmap_raw_with_changepoint(raw_time_series_by_ip, "/Users/kevinvermeulen/Documents/Papers/CCR/ccr-template/figures/test_cp_0.05.bmp");
+    plotter.plot_bitmap_raw_with_changepoint(raw_time_series_by_ip_individual, "/Users/kevinvermeulen/Documents/Papers/CCR/ccr-template/figures/test_cp_individual_0.05.bmp");
     for (const auto & t_cp : t11_cp){
         std::cout << t_cp.first << ", " << t_cp.second <<  "\n";
     }
