@@ -1,0 +1,17 @@
+1, 4, DIRECT, icmp, CANDIDATE, 210.146.252.210, 210.146.252.210
+1, 4, DIRECT, icmp, CANDIDATE, 62.40.124.162, 62.40.124.162
+1, 4, DIRECT, icmp, CANDIDATE, 212.18.65.100, 212.18.65.100
+1, 4, DIRECT, icmp, CANDIDATE, 202.97.35.81, 202.97.35.81
+1, 4, DIRECT, icmp, CANDIDATE, 212.18.65.100, 212.18.65.100
+1, 4, DIRECT, icmp, CANDIDATE, 212.18.65.100, 212.18.65.100
+1, 4, DIRECT, icmp, CANDIDATE, 212.18.65.100, 212.18.65.100
+1, 4, DIRECT, icmp, CANDIDATE, 212.18.65.100, 212.18.65.100
+1, 4, DIRECT, icmp, CANDIDATE, 212.18.65.100, 212.18.65.100
+1, 4, DIRECT, icmp, CANDIDATE, 212.18.65.100, 212.18.65.100
+
+/Users/kevinvermeulen/CLionProjects/ICMPRateLimiting/resources/pcap/paper/individual/icmp_echo_reply_184.105.81.77_2048_INDIVIDUAL.pcap
+/Users/kevinvermeulen/CLionProjects/ICMPRateLimiting/resources/pcap/paper/individual/icmp_echo_reply_162.252.70.103_2048_INDIVIDUAL.pcap
+/Users/kevinvermeulen/CLionProjects/ICMPRateLimiting/resources/pcap/paper/individual/icmp_echo_reply_162.252.70.100_2048_INDIVIDUAL.pcap
+/Users/kevinvermeulen/CLionProjects/ICMPRateLimiting/resources/pcap/paper/individual/icmp_echo_reply_139.226.203.121_2048_INDIVIDUAL.pcap
+/Users/kevinvermeulen/CLionProjects/ICMPRateLimiting/resources/pcap/paper/individual/icmp_echo_reply_94.142.119.235_2048_INDIVIDUAL.pcap
+/Users/kevinvermeulen/CLionProjects/ICMPRateLimiting/resources/pcap/paper/individual/icmp_echo_reply_84.255.209.162_2048_INDIVIDUAL.pcap
